@@ -2,12 +2,13 @@
 __pycache__/
 *.py[cod]
 
+# Editors
+.vscode/
+.idea/
+
 # OS
 .DS_Store
 Thumbs.db
 
-# Local files that may contain secrets or personal config
-temp.txt
-template.yaml.txt
+# Local test copies (e.g. a filled-in Settings.ps1 with a webhook URL)
 *.local.ps1
-*.local.sh
