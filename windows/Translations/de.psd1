@@ -35,4 +35,5 @@
     IncompleteUser = "Jeder konfigurierte Windows-Benutzer benötigt einen Benutzernamen und eine Webhook-URL."
     UnknownUser = "Kein konfigurierter Windows-Benutzer mit dem Namen '{0}' gefunden."
     ProfileLookupFailed = "Windows-Profile konnten nicht ihren Konto-SIDs zugeordnet werden. Es wird auf den Benutzernamen zurückgegriffen. Fehler: {0}"
+    OwnerSidLookupFailed = "Die SID des Windows-Kontos '{0}' konnte nicht aufgelöst werden. Es wird auf den Benutzernamen zurückgegriffen. Fehler: {1}"
 }

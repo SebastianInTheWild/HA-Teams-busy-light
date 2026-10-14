@@ -35,4 +35,5 @@
     IncompleteUser = "Every configured Windows user must have a username and webhook URL."
     UnknownUser = "No configured Windows user matches '{0}'."
     ProfileLookupFailed = "Could not map configured Windows profiles to their account SIDs. Falling back to username matching. Error: {0}"
+    OwnerSidLookupFailed = "Could not resolve the SID for Windows account '{0}'. Falling back to username matching. Error: {1}"
 }

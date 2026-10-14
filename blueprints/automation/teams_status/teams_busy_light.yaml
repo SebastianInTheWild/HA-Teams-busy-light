@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 blueprint:
   name: Teams Busy Light
   description: >-
@@ -159,3 +160,166 @@ actions:
             data:
               rgb_color: !input color_available
               brightness_pct: !input brightness
+=======
+blueprint:
+  name: Teams Busy Light
+  description: >-
+    Zeigt den Microsoft-Teams-Status (Integration „Teams Busy Light“) an
+    Lampen an: Verfügbar = grün, Beschäftigt/Besprechung/Anruf = rot,
+    Nicht stören/Präsentiert/Konzentriert = rot (eigene Farbe möglich),
+    Abwesend/Bin gleich zurück = orange, Offline = aus.
+    Bei der Einrichtung der Integration wird „Teams“ automatisch vor den
+    eingegebenen Namen gesetzt. Es müssen nur die Lampen ausgewählt werden.
+  domain: automation
+  source_url: https://github.com/SebastianInTheWild/HA-Teams-busy-light/blob/main/blueprints/automation/teams_status/teams_busy_light.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    lights:
+      name: Lampen
+      icon: mdi:lightbulb-group
+      input:
+        target_lights:
+          name: Lampen
+          description: Lampen, die den Teams-Status anzeigen.
+          selector:
+            target:
+              entity:
+                domain: light
+    teams:
+      name: Teams-Sensoren
+      icon: mdi:microsoft-teams
+      collapsed: true
+      input:
+        status_sensor:
+          name: Status-Sensor
+          selector:
+            entity:
+              integration: teams_status
+              domain: sensor
+        activity_sensor:
+          name: Aktivitäts-Sensor
+          selector:
+            entity:
+              integration: teams_status
+              domain: sensor
+    appearance:
+      name: Farben und Helligkeit
+      icon: mdi:palette
+      collapsed: true
+      input:
+        brightness:
+          name: Helligkeit
+          default: 100
+          selector:
+            number:
+              min: 1
+              max: 100
+              unit_of_measurement: "%"
+        color_available:
+          name: Verfügbar
+          default: [0, 255, 0]
+          selector:
+            color_rgb: {}
+        color_busy:
+          name: Beschäftigt, Besprechung, Anruf
+          default: [255, 30, 10]
+          selector:
+            color_rgb: {}
+        color_do_not_disturb:
+          name: Nicht stören, Präsentiert, Konzentriert
+          default: [255, 30, 10]
+          selector:
+            color_rgb: {}
+        color_away:
+          name: Abwesend, Bin gleich zurück
+          default: [252, 150, 0]
+          selector:
+            color_rgb: {}
+
+# The newest Teams state always wins
+mode: restart
+max_exceeded: silent
+
+triggers:
+  - trigger: state
+    entity_id: !input status_sensor
+    to:
+      - available
+      - busy
+      - in_a_call
+      - in_a_meeting
+      - presenting
+      - focusing
+      - do_not_disturb
+      - be_right_back
+      - away
+      - offline
+  - trigger: state
+    entity_id: !input activity_sensor
+    to:
+      - not_in_call
+      - in_call
+      - incoming_call
+      - outgoing_call
+
+actions:
+  - choose:
+      - alias: Offline
+        conditions:
+          - condition: state
+            entity_id: !input status_sensor
+            state: offline
+        sequence:
+          - action: light.turn_off
+            target: !input target_lights
+      - alias: Nicht stören, Präsentiert, Konzentriert
+        conditions:
+          - condition: state
+            entity_id: !input status_sensor
+            state: [do_not_disturb, presenting, focusing]
+        sequence:
+          - action: light.turn_on
+            target: !input target_lights
+            data:
+              rgb_color: !input color_do_not_disturb
+              brightness_pct: !input brightness
+      - alias: Beschäftigt oder im Anruf
+        conditions:
+          - condition: or
+            conditions:
+              - condition: state
+                entity_id: !input status_sensor
+                state: [busy, in_a_call, in_a_meeting]
+              - condition: state
+                entity_id: !input activity_sensor
+                state: [in_call, incoming_call, outgoing_call]
+        sequence:
+          - action: light.turn_on
+            target: !input target_lights
+            data:
+              rgb_color: !input color_busy
+              brightness_pct: !input brightness
+      - alias: Abwesend
+        conditions:
+          - condition: state
+            entity_id: !input status_sensor
+            state: [away, be_right_back]
+        sequence:
+          - action: light.turn_on
+            target: !input target_lights
+            data:
+              rgb_color: !input color_away
+              brightness_pct: !input brightness
+      - alias: Verfügbar
+        conditions:
+          - condition: state
+            entity_id: !input status_sensor
+            state: available
+        sequence:
+          - action: light.turn_on
+            target: !input target_lights
+            data:
+              rgb_color: !input color_available
+              brightness_pct: !input brightness
+>>>>>>> b9d542111a29b60513cdb592535e8745e562db0a

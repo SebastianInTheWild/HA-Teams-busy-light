@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 {
   "domain": "teams_status",
   "name": "Teams Busy Light",
@@ -11,3 +12,18 @@
   "requirements": [],
   "version": "1.0.1"
 }
+=======
+{
+  "domain": "teams_status",
+  "name": "Teams Busy Light",
+  "codeowners": ["@SebastianInTheWild"],
+  "config_flow": true,
+  "dependencies": ["webhook"],
+  "documentation": "https://github.com/SebastianInTheWild/HA-Teams-busy-light",
+  "integration_type": "device",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/SebastianInTheWild/HA-Teams-busy-light/issues",
+  "requirements": [],
+  "version": "1.0.1"
+}
+>>>>>>> b9d542111a29b60513cdb592535e8745e562db0a
