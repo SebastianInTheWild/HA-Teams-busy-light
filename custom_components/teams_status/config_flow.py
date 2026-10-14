@@ -44,8 +44,13 @@ class TeamsStatusConfigFlow(ConfigFlow, domain=DOMAIN):
         """Handle the initial step."""
         if user_input is not None:
             webhook_id = webhook.async_generate_id()
+            name = user_input[CONF_NAME].strip()
+            if name.casefold() == DEFAULT_NAME.casefold():
+                name = ""
+            elif name.casefold().startswith(f"{DEFAULT_NAME} ".casefold()):
+                name = name[len(DEFAULT_NAME) :].strip()
             return self.async_create_entry(
-                title=user_input[CONF_NAME],
+                title=" ".join(part for part in (DEFAULT_NAME, name) if part),
                 data={CONF_WEBHOOK_ID: webhook_id},
                 options={CONF_TIMEOUT: DEFAULT_TIMEOUT},
                 description_placeholders={
@@ -56,7 +61,7 @@ class TeamsStatusConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(
-                {vol.Required(CONF_NAME, default=DEFAULT_NAME): str}
+                {vol.Required(CONF_NAME, default=""): str}
             ),
         )
 

@@ -37,15 +37,19 @@ options), Teams is set to `offline` – e.g. when the computer is shut down.
 
 * Windows client with the new Microsoft Teams installed
 * Home Assistant reachable from the client
-* `nssm.exe`, `Get-TeamsStatus.ps1`, `Languages.ps1`, `Settings.ps1`, and `Install.ps1` in the same folder
+* `nssm.exe`, `Get-TeamsStatus.ps1`, `Languages.ps1`, `Messages.ps1`, `Translations`, `Settings.ps1`, `Install.ps1`, and `Uninstall.ps1` in the same folder
 
 ## Home Assistant integration
 
 1. Copy `custom_components/teams_status` to `<config>/custom_components/teams_status`
 2. Restart Home Assistant
 3. Settings → Devices & Services → Add Integration → **Teams Busy Light**
-4. Keep the name `Teams` (entities become `sensor.teams_status` / `sensor.teams_activity`)
+4. Enter a user suffix, e.g. `Anna`; the entry becomes `Teams Anna`
 5. Copy the webhook URL shown after setup (also visible later under *Configure*)
+
+Create a separate integration entry for each Windows user. This gives each person their
+own webhook and sensors, e.g. `sensor.teams_anna_status` and
+`sensor.teams_anna_activity`.
 
 No long-lived access token is needed anymore.
 
@@ -58,20 +62,42 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
 .\Install.ps1
 ```
 
-The installer will prompt you for:
+The installer opens in German or English based on the Windows display language. Add a
+matching `Translations/<language>.psd1` file to add another UI language.
 
-* Home Assistant webhook URL (`https://.../api/webhook/...`)
-* Local Windows username (optional, press Enter for auto-detect)
+The installer supports multiple Windows users. Use the Windows profile folder name
+(usually the signed-in account name). For **each** Windows profile:
+
+1. Add a separate **Teams Busy Light** integration entry in Home Assistant.
+2. Copy its webhook URL (`https://.../api/webhook/...`).
+3. Add a row in the installer with the Windows profile folder name and that webhook URL.
+
+The current signed-in Windows user is pre-filled in the first row. Use **Add user** for
+additional profiles. Each user sends status to their own Home Assistant sensors.
+The installed service monitors all listed profiles independently.
 
 What `Install.ps1` does:
 
 * Automatically elevates to Administrator if required
-* Auto-detects the signed-in username when left empty (with fallbacks)
+* Pre-fills the signed-in username (with fallbacks)
 * Writes values into `C:\Scripts\TeamsStatus\Settings.ps1`
 * Resolves the Home Assistant DNS name from the webhook URL using DNS servers from active LAN/Wi-Fi adapters
 * Adds or updates the resolved mapping in the Windows hosts file (`%windir%\System32\drivers\etc\hosts`)
-* Copies script files to `C:\Scripts\TeamsStatus`
+* Copies script files and language resources to `C:\Scripts\TeamsStatus`
 * Installs (or, when already installed, restarts) the `Microsoft Teams Status Monitor` service via NSSM
+* Marks the Home Assistant hosts-file entries so the uninstaller can identify them
+
+## Uninstallation
+
+Run `Uninstall.ps1` as Administrator from the downloaded `windows` folder. The script
+asks for confirmation, stops and removes the `Microsoft Teams Status Monitor` service,
+and removes `C:\Scripts\TeamsStatus` (including the saved webhook settings). It removes
+hosts-file entries marked as belonging to Teams Busy Light. Older unmarked entries are
+only removed after a separate prompt; Home Assistant integration entries are never
+removed.
+
+The uninstaller refuses to remove a service whose executable path does not point to
+this installation's NSSM executable.
 
 ## Busy light blueprint
 
@@ -97,4 +123,16 @@ Get-Service -Name "Microsoft Teams Status Monitor"
 * If hosts update fails, confirm the UAC elevation prompt was accepted
 * If DNS resolution fails, verify network adapter DNS settings and HA DNS record
 * If the status is not recognized, look at the `SetTaskbarIconOverlay` / `SetBadge` lines in the Teams log and add the wording to `Languages.ps1`
-* If username auto-detection picks the wrong user on shared systems, rerun `Install.ps1` and enter the username manually
+* If username auto-detection picks the wrong user on shared systems, rerun `Install.ps1` and edit the username in the installer window
+
+### Mehrere Windows-Benutzer
+
+Für jedes Windows-Profil wird ein eigener **Teams Busy Light**-Integrationseintrag in Home
+Assistant benötigt. Trage den jeweiligen Windows-Profilordnernamen und dessen eigene
+Webhook-URL in einer eigenen Zeile ein. Der angemeldete Benutzer wird in der ersten Zeile
+vorausgefüllt; weitere Profile kannst du mit **Benutzer hinzufügen** ergänzen. Der
+Windows-Dienst überwacht alle aufgeführten Profile getrennt und sendet jeden Status an
+die zugehörigen eigenen Sensoren.
+
+Die Installationsoberfläche wählt Deutsch oder Englisch anhand der Windows-Anzeigesprache.
+Weitere Sprachen können durch eine Datei `Translations/<sprachcode>.psd1` ergänzt werden.

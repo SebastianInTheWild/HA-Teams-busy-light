@@ -41,8 +41,9 @@ restart Home Assistant.
 
 [![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=teams_status)
 
-Keep the name `Teams` for `sensor.teams_status` / `sensor.teams_activity`, or use one
-entry per person, e.g. `Teams Anna` → `sensor.teams_anna_status`.
+Enter a person or computer name (for example, `Anna`); `Teams` is added automatically,
+giving you `Teams Anna` → `sensor.teams_anna_status`. Leave the name empty for
+`Teams` → `sensor.teams_status` / `sensor.teams_activity`.
 **Copy the webhook URL** shown after setup – you need it in step 3.
 
 Lost the URL? Open the integration and click **Configure**:
@@ -58,12 +59,18 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
 .\Install.ps1
 ```
 
-The installer asks for the webhook URL from step 2 and installs the
-`Microsoft Teams Status Monitor` service. Details: [windows/README.md](windows/README.md)
+The installer opens in German or English and supports multiple Windows users. Add one
+separate Home Assistant integration and webhook URL for each Windows profile. The
+`Microsoft Teams Status Monitor` service sends each profile to its own sensors.
+Details: [windows/README.md](windows/README.md)
+
+To remove the Windows service and its installed files later, run `Uninstall.ps1` from
+the downloaded `windows` folder as Administrator. This does not remove the Home
+Assistant integration entries.
 
 ### 4. Busy light automation
 
-[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FSebastianInTheWild%2FHA-Teams-busy-light%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fteams_status%2Fteams_busy_light.yaml)
+[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FSebastianInTheWild%2FHA-Teams-busy-light%2Fmain%2Fblueprints%2Fautomation%2Fteams_status%2Fteams_busy_light.yaml)
 
 Import the blueprint, then create an automation from it – **only the lights have to be
 selected**. Colors, brightness and the Teams sensors can be changed in the collapsed sections.
@@ -86,7 +93,8 @@ selected**. Colors, brightness and the Teams sensors can be changed in the colla
 | `sensor.teams_activity` | `not_in_call`, `in_call`, `incoming_call`, `outgoing_call` |
 
 The states are language-neutral, so automations work in every language; the UI shows them
-translated (e.g. `in_call` → "Im Anruf" / "In a call"). The status sensor has the attributes
+translated (e.g. `in_call` → "Im Anruf" / "In a call"). Entity IDs always use English
+sensor names, regardless of the Home Assistant UI language. The status sensor has the attributes
 `computer`, `teams_language` and `last_seen`.
 
 If a computer stops reporting (shut down, asleep), the integration sets the status to

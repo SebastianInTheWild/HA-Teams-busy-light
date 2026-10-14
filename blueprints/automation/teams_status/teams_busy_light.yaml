@@ -5,7 +5,8 @@ blueprint:
     Lampen an: Verfügbar = grün, Beschäftigt/Besprechung/Anruf = rot,
     Nicht stören/Präsentiert/Konzentriert = rot (eigene Farbe möglich),
     Abwesend/Bin gleich zurück = orange, Offline = aus.
-    Es müssen nur die Lampen ausgewählt werden.
+    Bei der Einrichtung der Integration wird „Teams“ automatisch vor den
+    eingegebenen Namen gesetzt. Es müssen nur die Lampen ausgewählt werden.
   domain: automation
   source_url: https://github.com/SebastianInTheWild/HA-Teams-busy-light/blob/main/blueprints/automation/teams_status/teams_busy_light.yaml
   homeassistant:
@@ -29,14 +30,12 @@ blueprint:
       input:
         status_sensor:
           name: Status-Sensor
-          default: sensor.teams_status
           selector:
             entity:
               integration: teams_status
               domain: sensor
         activity_sensor:
           name: Aktivitäts-Sensor
-          default: sensor.teams_activity
           selector:
             entity:
               integration: teams_status
@@ -80,15 +79,26 @@ mode: restart
 max_exceeded: silent
 
 triggers:
-  # to: null ignores attribute-only changes (e.g. the keep-alive "last_seen")
   - trigger: state
     entity_id: !input status_sensor
-    to: null
-    not_to: [unavailable, unknown]
+    to:
+      - available
+      - busy
+      - in_a_call
+      - in_a_meeting
+      - presenting
+      - focusing
+      - do_not_disturb
+      - be_right_back
+      - away
+      - offline
   - trigger: state
     entity_id: !input activity_sensor
-    to: null
-    not_to: [unavailable, unknown]
+    to:
+      - not_in_call
+      - in_call
+      - incoming_call
+      - outgoing_call
 
 actions:
   - choose:

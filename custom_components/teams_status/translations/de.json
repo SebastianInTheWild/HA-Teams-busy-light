@@ -5,10 +5,10 @@
         "title": "Teams Busy Light",
         "description": "Erstellt einen Webhook, der den Teams-Status vom Windows-Skript (Get-TeamsStatus.ps1) empfängt.",
         "data": {
-          "name": "Name"
+          "name": "Namenszusatz"
         },
         "data_description": {
-          "name": "Name des Geräts. Mit „Teams“ heißen die Entitäten sensor.teams_status und sensor.teams_activity."
+          "name": "Gib den Namen einer Person oder eines Computers ein; „Teams“ wird automatisch vorangestellt (z. B. wird aus Anna „Teams Anna“). Leer lassen für „Teams“."
         }
       }
     },
@@ -59,7 +59,7 @@
         }
       },
       "activity": {
-        "name": "Aktivität",
+        "name": "Activity",
         "state": {
           "not_in_call": "Kein Anruf",
           "in_call": "Im Anruf",
