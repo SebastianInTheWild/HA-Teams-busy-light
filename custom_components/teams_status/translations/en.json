@@ -5,10 +5,10 @@
         "title": "Teams Busy Light",
         "description": "Creates a webhook that receives the Teams status from the Windows script (Get-TeamsStatus.ps1).",
         "data": {
-          "name": "Name"
+          "name": "Name suffix"
         },
         "data_description": {
-          "name": "Name of the device. With \"Teams\" the entities are sensor.teams_status and sensor.teams_activity."
+          "name": "Enter a person or computer name; \"Teams\" is added automatically (for example, Anna becomes \"Teams Anna\"). Leave empty for just \"Teams\"."
         }
       }
     },
