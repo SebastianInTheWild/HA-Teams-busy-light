@@ -1,6 +1,7 @@
 """The Teams Busy Light integration.
 
 Receives the Teams status from the Windows script (windows/Get-TeamsStatus.ps1)
+or the macOS script (macos/teams-busy-light.sh)
 via a webhook and provides it as sensors.
 """
 

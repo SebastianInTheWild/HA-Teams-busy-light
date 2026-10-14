@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+* macOS support: `macos/install.sh` installs a background app that sends the Teams status and call state to the integration; no administrator rights needed
+
 ## 1.1.2
 
 * Brand icon: red dot in the corner shows the busy light

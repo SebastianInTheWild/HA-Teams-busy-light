@@ -25,6 +25,14 @@ jobs:
           # Brand images ship locally in custom_components/teams_status/brand
           ignore: brands
 
+  shellcheck:
+    name: ShellCheck (macOS scripts)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Analyze
+        run: shellcheck -x macos/*.sh
+
   powershell:
     name: PSScriptAnalyzer (Windows scripts)
     runs-on: windows-latest

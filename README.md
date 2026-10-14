@@ -8,15 +8,15 @@
 Show your **Microsoft Teams status in Home Assistant** and turn any light into a
 busy light – without Graph API, app registration or admin consent.
 
-A small script on your Windows PC reads the status of the new Teams client and
+A small script on your Windows PC or Mac reads the status of the new Teams client and
 sends it to the **Teams Busy Light** integration in Home Assistant via a webhook.
 
 | | |
 |---|---|
 | **Status** | Available, Busy, In a call, In a meeting, Presenting, Focusing, Do not disturb, Be right back, Away, Offline |
 | **Activity** | Not in a call, In a call, Incoming call, Outgoing call |
-| **Languages** | Teams app in German or English (detected automatically), Home Assistant UI in German or English |
-| **Platform** | Windows with the new Microsoft Teams (runs as a service) |
+| **Languages** | Windows: Teams app in German or English (detected automatically); macOS: any Teams language. Home Assistant UI in German or English |
+| **Platform** | Windows (runs as a service) or macOS (runs as a background app), each with the new Microsoft Teams |
 
 ## Quick start
 
@@ -56,6 +56,8 @@ Lost the URL? Open the integration and click **Configure**:
 
 ### 3. Install the script on your computer
 
+#### Windows
+
 Download the [`windows`](windows) folder and run in PowerShell:
 
 ```powershell
@@ -71,6 +73,21 @@ Details: [windows/README.md](windows/README.md)
 To remove the Windows service and its installed files later, run `Uninstall.ps1` from
 the downloaded `windows` folder as Administrator. This does not remove the Home
 Assistant integration entries.
+
+#### macOS
+
+Download the [`macos`](macos) folder and run in Terminal, in that folder:
+
+```shell
+bash install.sh
+```
+
+No administrator rights are needed. When macOS asks whether "Teams Busy Light" may access
+data from other apps, click **Allow**. Remove it later with `bash uninstall.sh`.
+Details: [macos/README.md](macos/README.md)
+
+The Mac does not detect ringing separately; the activity switches to `in_call` when the
+call starts.
 
 ### 4. Busy light automation
 
@@ -114,7 +131,7 @@ If a computer stops reporting (shut down, asleep), the integration sets the stat
 ## How it works
 
 ```
-Teams log / call state ──► script (Windows service)
+Teams log / call state ──► script (Windows service / macOS app)
                               │  POST {"status": "busy", "activity": "in_call", ...}
                               ▼
                Home Assistant webhook ──► sensor.teams_status / sensor.teams_activity
@@ -123,19 +140,23 @@ Teams log / call state ──► script (Windows service)
                                        Busy light automation (blueprint)
 ```
 
-The script reads the status from the Teams log (`SetTaskbarIconOverlay` / `SetBadge`) in the
-language of the Teams app and the call state from call events in the same log.
+On Windows, the script reads the status from the Teams log (`SetTaskbarIconOverlay` / `SetBadge`)
+in the language of the Teams app and the call state from call events in the same log.
+On macOS, Teams logs the status with language-neutral English values; a running call is
+detected by the power assertion Teams holds during the call.
 
 No long-lived access token is needed; the webhook ID is the secret – treat the URL like a password.
 
 ## Add a language
 
-The status is written to the Teams log in the language of the Teams app. Add the wording of
+On Windows, the status is written to the Teams log in the language of the Teams app (macOS
+needs no language patterns). Add the wording of
 your language to [`windows/Languages.ps1`](windows/Languages.ps1) and open a pull request.
 
 ## Troubleshooting
 
-* **Status not recognized:** look for lines with `SetTaskbarIconOverlay` / `SetBadge` in the
+* **macOS:** see [macos/README.md](macos/README.md#troubleshooting).
+* **Status not recognized (Windows):** look for lines with `SetTaskbarIconOverlay` / `SetBadge` in the
   newest `MSTeams_*.log` and [open an issue](https://github.com/SebastianInTheWild/HA-Teams-busy-light/issues/new/choose)
   with the line (remove personal data).
 * **Entities are named `…_2`:** an older entity with the same ID exists – remove it under
