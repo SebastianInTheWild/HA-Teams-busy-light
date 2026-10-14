@@ -37,7 +37,7 @@ options), Teams is set to `offline` – e.g. when the computer is shut down.
 
 * Windows client with the new Microsoft Teams installed
 * Home Assistant reachable from the client
-* `nssm.exe`, `Get-TeamsStatus.ps1`, `Languages.ps1`, `Messages.ps1`, `Translations`, `Settings.ps1`, `Install.ps1`, and `Uninstall.ps1` in the same folder
+* `nssm.exe`, `Get-TeamsStatus.ps1`, `Languages.ps1`, `Messages.ps1`, `Translations`, `Settings.ps1`, `Install.cmd`, `Install.ps1`, and `Uninstall.ps1` in the same folder
 
 ## Home Assistant integration
 
@@ -55,7 +55,10 @@ No long-lived access token is needed anymore.
 
 ## Installation (recommended)
 
-Run `Install.ps1` from the script folder:
+Double-click `Install.cmd` in the script folder. It asks for administrator rights and
+opens the installer window without a PowerShell console.
+
+Alternatively, run `Install.ps1` in PowerShell:
 
 ```powershell
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process

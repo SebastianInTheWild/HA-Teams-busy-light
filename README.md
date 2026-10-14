@@ -58,7 +58,7 @@ Lost the URL? Open the integration and click **Configure**:
 
 #### Windows
 
-Download the [`windows`](windows) folder and run in PowerShell:
+Download the [`windows`](windows) folder and double-click `Install.cmd`, or run in PowerShell:
 
 ```powershell
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
