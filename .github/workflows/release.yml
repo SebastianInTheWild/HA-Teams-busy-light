@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create GitHub release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check manifest version matches tag
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          manifest=$(jq -r .version custom_components/teams_status/manifest.json)
+          if [ "$manifest" != "$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match manifest.json version $manifest"
+            exit 1
+          fi
+
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          # Lines between "## <version>" and the next "## " heading
+          tr -d '\r' < CHANGELOG.md \
+            | awk -v v="$version" '$0 == "## " v {f=1; next} /^## /{f=0} f' \
+            > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "::error::No section '## $version' found in CHANGELOG.md"
+            exit 1
+          fi
+          cat notes.md
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --title "$version" --notes-file notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" --title "$version" --notes-file notes.md --verify-tag
+          fi
