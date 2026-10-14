@@ -75,6 +75,13 @@ Assistant integration entries.
 Import the blueprint, then create an automation from it – **only the lights have to be
 selected**. Colors, brightness and the Teams sensors can be changed in the collapsed sections.
 
+Or import it manually under **Settings → Automations & scenes → Blueprints → Import blueprint**
+with this URL:
+
+```text
+https://github.com/SebastianInTheWild/HA-Teams-busy-light/blob/main/blueprints/automation/teams_status/teams_busy_light.yaml
+```
+
 [![Open your Home Assistant instance and show your blueprints.](https://my.home-assistant.io/badges/blueprints.svg)](https://my.home-assistant.io/redirect/blueprints/)
 
 | Teams status | Light |

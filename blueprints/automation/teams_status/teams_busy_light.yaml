@@ -1,52 +1,52 @@
 blueprint:
   name: Teams Busy Light
   description: >-
-    Zeigt den Microsoft-Teams-Status (Integration „Teams Busy Light“) an
-    Lampen an: Verfügbar = grün, Beschäftigt/Besprechung/Anruf = rot,
-    Nicht stören/Präsentiert/Konzentriert = rot (eigene Farbe möglich),
-    Abwesend/Bin gleich zurück = orange, Offline = aus.
-    Bei der Einrichtung der Integration wird „Teams“ automatisch vor den
-    eingegebenen Namen gesetzt. Es müssen nur die Lampen ausgewählt werden.
+    Shows the Microsoft Teams status (integration "Teams Busy Light") on
+    lights: Available = green, Busy/In a meeting/In a call = red,
+    Do not disturb/Presenting/Focusing = red (custom color possible),
+    Away/Be right back = orange, Offline = off.
+    When setting up the integration, "Teams" is added in front of the
+    entered name automatically. Only the lights have to be selected.
   domain: automation
   source_url: https://github.com/SebastianInTheWild/HA-Teams-busy-light/blob/main/blueprints/automation/teams_status/teams_busy_light.yaml
   homeassistant:
     min_version: "2024.10.0"
   input:
     lights:
-      name: Lampen
+      name: Lights
       icon: mdi:lightbulb-group
       input:
         target_lights:
-          name: Lampen
-          description: Lampen, die den Teams-Status anzeigen.
+          name: Lights
+          description: Lights that show the Teams status.
           selector:
             target:
               entity:
                 domain: light
     teams:
-      name: Teams-Sensoren
+      name: Teams sensors
       icon: mdi:microsoft-teams
       collapsed: true
       input:
         status_sensor:
-          name: Status-Sensor
+          name: Status sensor
           selector:
             entity:
               integration: teams_status
               domain: sensor
         activity_sensor:
-          name: Aktivitäts-Sensor
+          name: Activity sensor
           selector:
             entity:
               integration: teams_status
               domain: sensor
     appearance:
-      name: Farben und Helligkeit
+      name: Colors and brightness
       icon: mdi:palette
       collapsed: true
       input:
         brightness:
-          name: Helligkeit
+          name: Brightness
           default: 100
           selector:
             number:
@@ -54,22 +54,22 @@ blueprint:
               max: 100
               unit_of_measurement: "%"
         color_available:
-          name: Verfügbar
+          name: Available
           default: [0, 255, 0]
           selector:
             color_rgb: {}
         color_busy:
-          name: Beschäftigt, Besprechung, Anruf
+          name: Busy, In a meeting, In a call
           default: [255, 30, 10]
           selector:
             color_rgb: {}
         color_do_not_disturb:
-          name: Nicht stören, Präsentiert, Konzentriert
+          name: Do not disturb, Presenting, Focusing
           default: [255, 30, 10]
           selector:
             color_rgb: {}
         color_away:
-          name: Abwesend, Bin gleich zurück
+          name: Away, Be right back
           default: [252, 150, 0]
           selector:
             color_rgb: {}
@@ -110,7 +110,7 @@ actions:
         sequence:
           - action: light.turn_off
             target: !input target_lights
-      - alias: Nicht stören, Präsentiert, Konzentriert
+      - alias: Do not disturb, Presenting, Focusing
         conditions:
           - condition: state
             entity_id: !input status_sensor
@@ -121,7 +121,7 @@ actions:
             data:
               rgb_color: !input color_do_not_disturb
               brightness_pct: !input brightness
-      - alias: Beschäftigt oder im Anruf
+      - alias: Busy or in a call
         conditions:
           - condition: or
             conditions:
@@ -137,7 +137,7 @@ actions:
             data:
               rgb_color: !input color_busy
               brightness_pct: !input brightness
-      - alias: Abwesend
+      - alias: Away
         conditions:
           - condition: state
             entity_id: !input status_sensor
@@ -148,7 +148,7 @@ actions:
             data:
               rgb_color: !input color_away
               brightness_pct: !input brightness
-      - alias: Verfügbar
+      - alias: Available
         conditions:
           - condition: state
             entity_id: !input status_sensor
