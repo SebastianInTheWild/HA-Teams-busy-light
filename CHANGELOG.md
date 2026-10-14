@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.0
 
 * macOS support: `macos/install.sh` installs a background app that sends the Teams status and call state to the integration; no administrator rights needed
 * Windows: `Install.cmd` starts the installer as administrator without a PowerShell console
