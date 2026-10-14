@@ -31,8 +31,8 @@ async def async_setup_entry(
 class TeamsStatusSensor(RestoreSensor):
     """Teams availability status or call activity.
 
-    With the device name "Teams" the entity IDs become sensor.teams_status and
-    sensor.teams_activity (object IDs are built from the English names).
+    Entity names stay English in every UI language so their entity IDs remain
+    stable (for example, sensor.teams_status and sensor.teams_activity).
     """
 
     _attr_has_entity_name = True

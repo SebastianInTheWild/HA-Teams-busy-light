@@ -5,7 +5,8 @@ blueprint:
     Lampen an: Verfügbar = grün, Beschäftigt/Besprechung/Anruf = rot,
     Nicht stören/Präsentiert/Konzentriert = rot (eigene Farbe möglich),
     Abwesend/Bin gleich zurück = orange, Offline = aus.
-    Es müssen nur die Lampen ausgewählt werden.
+    Bei der Einrichtung der Integration wird „Teams“ automatisch vor den
+    eingegebenen Namen gesetzt. Es müssen nur die Lampen ausgewählt werden.
   domain: automation
   source_url: https://github.com/SebastianInTheWild/HA-Teams-busy-light/blob/main/blueprints/automation/teams_status/teams_busy_light.yaml
   homeassistant:
