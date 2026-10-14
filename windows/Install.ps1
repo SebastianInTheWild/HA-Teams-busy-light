@@ -1,4 +1,8 @@
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
+. ($PSScriptRoot + "\Messages.ps1")
+$DetectedUiLanguage = [System.Globalization.CultureInfo]::CurrentUICulture.TwoLetterISOLanguageName
+$UiLanguage = $DetectedUiLanguage
+$Messages = Get-TeamsMessages -Language $UiLanguage -Root $PSScriptRoot
 
 $CurrentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $CurrentPrincipal = New-Object Security.Principal.WindowsPrincipal($CurrentIdentity)
@@ -6,10 +10,10 @@ $IsAdmin = $CurrentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::A
 
 if (-not $IsAdmin) {
     if ([string]::IsNullOrWhiteSpace($PSCommandPath)) {
-        throw "This script must run as Administrator. Save and run the script file to allow automatic elevation."
+        throw $Messages.SaveAndRun
     }
 
-    Write-Host "Restarting installer with Administrator rights..."
+    Write-Host $Messages.Elevating
     $ElevatedArgs = @(
         '-NoProfile'
         '-STA'
@@ -64,22 +68,26 @@ function Get-InteractiveUsername {
 }
 
 function Show-InstallerDialog {
-    param([string]$DetectedUsername)
+    param(
+        [string]$DetectedUsername,
+        [array]$ConfiguredUsers,
+        [hashtable]$Messages
+    )
 
     $Form = New-Object System.Windows.Forms.Form
-    $Form.Text = "Teams Busy Light Setup"
+    $Form.Text = $Messages.Title
     $Form.StartPosition = "CenterScreen"
     $Form.FormBorderStyle = "FixedDialog"
     $Form.MaximizeBox = $false
     $Form.MinimizeBox = $false
-    $Form.ClientSize = New-Object System.Drawing.Size(640, 400)
+    $Form.ClientSize = New-Object System.Drawing.Size(900, 720)
     $Form.BackColor = [System.Drawing.Color]::FromArgb(245, 247, 250)
     $Form.Font = New-Object System.Drawing.Font("Segoe UI", 9)
     $Form.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::Dpi
 
     $Header = New-Object System.Windows.Forms.Panel
     $Header.Location = New-Object System.Drawing.Point(0, 0)
-    $Header.Size = New-Object System.Drawing.Size(640, 112)
+    $Header.Size = New-Object System.Drawing.Size(900, 112)
     $Header.BackColor = [System.Drawing.Color]::FromArgb(25, 45, 70)
     $Form.Controls.Add($Header)
 
@@ -100,7 +108,7 @@ function Show-InstallerDialog {
     $Title = New-Object System.Windows.Forms.Label
     $Title.Location = New-Object System.Drawing.Point(92, 25)
     $Title.Size = New-Object System.Drawing.Size(510, 36)
-    $Title.Text = "Teams Busy Light"
+    $Title.Text = $Messages.HeaderTitle
     $Title.Font = New-Object System.Drawing.Font("Segoe UI Semibold", 18)
     $Title.ForeColor = [System.Drawing.Color]::White
     $Header.Controls.Add($Title)
@@ -108,58 +116,142 @@ function Show-InstallerDialog {
     $Subtitle = New-Object System.Windows.Forms.Label
     $Subtitle.Location = New-Object System.Drawing.Point(94, 65)
     $Subtitle.Size = New-Object System.Drawing.Size(510, 24)
-    $Subtitle.Text = "Connect your Teams status to Home Assistant"
+    $Subtitle.Text = $Messages.Subtitle
     $Subtitle.Font = New-Object System.Drawing.Font("Segoe UI", 9)
     $Subtitle.ForeColor = [System.Drawing.Color]::FromArgb(205, 216, 232)
     $Header.Controls.Add($Subtitle)
 
-    $WebhookCard = New-Object System.Windows.Forms.Panel
-    $WebhookCard.Location = New-Object System.Drawing.Point(24, 132)
-    $WebhookCard.Size = New-Object System.Drawing.Size(592, 91)
-    $WebhookCard.BackColor = [System.Drawing.Color]::White
-    $Form.Controls.Add($WebhookCard)
+    $InfoCard = New-Object System.Windows.Forms.Panel
+    $InfoCard.Location = New-Object System.Drawing.Point(24, 126)
+    $InfoCard.Size = New-Object System.Drawing.Size(852, 78)
+    $InfoCard.BackColor = [System.Drawing.Color]::FromArgb(232, 240, 255)
+    $Form.Controls.Add($InfoCard)
 
-    $WebhookLabel = New-Object System.Windows.Forms.Label
-    $WebhookLabel.Location = New-Object System.Drawing.Point(18, 13)
-    $WebhookLabel.Size = New-Object System.Drawing.Size(550, 21)
-    $WebhookLabel.Text = "Home Assistant webhook URL"
-    $WebhookLabel.Font = New-Object System.Drawing.Font("Segoe UI Semibold", 9)
-    $WebhookLabel.ForeColor = [System.Drawing.Color]::FromArgb(45, 55, 72)
-    $WebhookCard.Controls.Add($WebhookLabel)
+    $InfoLabel = New-Object System.Windows.Forms.Label
+    $InfoLabel.Location = New-Object System.Drawing.Point(14, 10)
+    $InfoLabel.Size = New-Object System.Drawing.Size(824, 58)
+    $InfoLabel.Text = $Messages.Info
+    $InfoLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $InfoLabel.ForeColor = [System.Drawing.Color]::FromArgb(40, 65, 105)
+    $InfoLabel.AutoEllipsis = $true
+    $InfoCard.Controls.Add($InfoLabel)
 
-    $WebhookInput = New-Object System.Windows.Forms.TextBox
-    $WebhookInput.Location = New-Object System.Drawing.Point(18, 42)
-    $WebhookInput.Size = New-Object System.Drawing.Size(556, 27)
-    $WebhookInput.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-    $WebhookInput.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
-    $WebhookCard.Controls.Add($WebhookInput)
+    $UsersHeading = New-Object System.Windows.Forms.Label
+    $UsersHeading.Location = New-Object System.Drawing.Point(26, 218)
+    $UsersHeading.Size = New-Object System.Drawing.Size(530, 26)
+    $UsersHeading.Text = $Messages.Users
+    $UsersHeading.Font = New-Object System.Drawing.Font("Segoe UI Semibold", 12)
+    $UsersHeading.ForeColor = [System.Drawing.Color]::FromArgb(45, 55, 72)
+    $Form.Controls.Add($UsersHeading)
 
-    $UsernameCard = New-Object System.Windows.Forms.Panel
-    $UsernameCard.Location = New-Object System.Drawing.Point(24, 235)
-    $UsernameCard.Size = New-Object System.Drawing.Size(592, 91)
-    $UsernameCard.BackColor = [System.Drawing.Color]::White
-    $Form.Controls.Add($UsernameCard)
+    $AddUserButton = New-Object System.Windows.Forms.Button
+    $AddUserButton.Location = New-Object System.Drawing.Point(738, 214)
+    $AddUserButton.Size = New-Object System.Drawing.Size(138, 32)
+    $AddUserButton.Text = "+  " + $Messages.AddUser
+    $AddUserButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+    $AddUserButton.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(205, 213, 224)
+    $AddUserButton.BackColor = [System.Drawing.Color]::White
+    $AddUserButton.ForeColor = [System.Drawing.Color]::FromArgb(45, 80, 145)
+    $AddUserButton.Cursor = [System.Windows.Forms.Cursors]::Hand
+    $Form.Controls.Add($AddUserButton)
 
-    $UsernameLabel = New-Object System.Windows.Forms.Label
-    $UsernameLabel.Location = New-Object System.Drawing.Point(18, 13)
-    $UsernameLabel.Size = New-Object System.Drawing.Size(550, 21)
-    $UsernameLabel.Text = "Windows username"
-    $UsernameLabel.Font = New-Object System.Drawing.Font("Segoe UI Semibold", 9)
-    $UsernameLabel.ForeColor = [System.Drawing.Color]::FromArgb(45, 55, 72)
-    $UsernameCard.Controls.Add($UsernameLabel)
+    $UsersPanel = New-Object System.Windows.Forms.Panel
+    $UsersPanel.Location = New-Object System.Drawing.Point(24, 254)
+    $UsersPanel.Size = New-Object System.Drawing.Size(852, 370)
+    $UsersPanel.AutoScroll = $true
+    $UsersPanel.BackColor = [System.Drawing.Color]::FromArgb(245, 247, 250)
+    $Form.Controls.Add($UsersPanel)
 
-    $UsernameInput = New-Object System.Windows.Forms.TextBox
-    $UsernameInput.Location = New-Object System.Drawing.Point(18, 42)
-    $UsernameInput.Size = New-Object System.Drawing.Size(556, 27)
-    $UsernameInput.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-    $UsernameInput.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
-    $UsernameInput.Text = $DetectedUsername
-    $UsernameCard.Controls.Add($UsernameInput)
+    $UserRows = New-Object System.Collections.ArrayList
+    $RefreshRows = {
+        for ($rowIndex = 0; $rowIndex -lt $UserRows.Count; $rowIndex++) {
+            $UserRows[$rowIndex].Panel.Location = New-Object System.Drawing.Point(8, (8 + ($rowIndex * 124)))
+            $UserRows[$rowIndex].RemoveButton.Enabled = ($UserRows.Count -gt 1)
+        }
+    }.GetNewClosure()
+
+    $AddUserRow = {
+        param([string]$Username, [string]$WebhookUrl)
+
+        $RowPanel = New-Object System.Windows.Forms.Panel
+        $RowPanel.Size = New-Object System.Drawing.Size(810, 112)
+        $RowPanel.BackColor = [System.Drawing.Color]::White
+
+        $UsernameLabel = New-Object System.Windows.Forms.Label
+        $UsernameLabel.Location = New-Object System.Drawing.Point(14, 10)
+        $UsernameLabel.Size = New-Object System.Drawing.Size(240, 20)
+        $UsernameLabel.Text = $Messages.Username
+        $UsernameLabel.Font = New-Object System.Drawing.Font("Segoe UI Semibold", 8)
+        $RowPanel.Controls.Add($UsernameLabel)
+
+        $WebhookLabel = New-Object System.Windows.Forms.Label
+        $WebhookLabel.Location = New-Object System.Drawing.Point(270, 10)
+        $WebhookLabel.Size = New-Object System.Drawing.Size(470, 20)
+        $WebhookLabel.Text = $Messages.Webhook
+        $WebhookLabel.Font = New-Object System.Drawing.Font("Segoe UI Semibold", 8)
+        $RowPanel.Controls.Add($WebhookLabel)
+
+        $UsernameInput = New-Object System.Windows.Forms.TextBox
+        $UsernameInput.Location = New-Object System.Drawing.Point(14, 36)
+        $UsernameInput.Size = New-Object System.Drawing.Size(240, 27)
+        $UsernameInput.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+        $UsernameInput.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+        $UsernameInput.Text = $Username
+        $RowPanel.Controls.Add($UsernameInput)
+
+        $WebhookInput = New-Object System.Windows.Forms.TextBox
+        $WebhookInput.Location = New-Object System.Drawing.Point(270, 36)
+        $WebhookInput.Size = New-Object System.Drawing.Size(526, 27)
+        $WebhookInput.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+        $WebhookInput.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+        $WebhookInput.Text = $WebhookUrl
+        $RowPanel.Controls.Add($WebhookInput)
+
+        $RemoveButton = New-Object System.Windows.Forms.Button
+        $RemoveButton.Location = New-Object System.Drawing.Point(14, 72)
+        $RemoveButton.Size = New-Object System.Drawing.Size(100, 28)
+        $RemoveButton.Text = $Messages.Remove
+        $RemoveButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+        $RemoveButton.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(220, 220, 220)
+        $RemoveButton.ForeColor = [System.Drawing.Color]::FromArgb(145, 55, 55)
+        $RemoveButton.Tag = $RowPanel
+        $Row = @{
+            Panel = $RowPanel
+            UsernameInput = $UsernameInput
+            WebhookInput = $WebhookInput
+            RemoveButton = $RemoveButton
+        }
+        [void]$UserRows.Add($Row)
+        $RemoveButton.Add_Click({
+            param($Sender, $EventArgs)
+            $RowToRemove = $Sender.Tag
+            [void]$UserRows.Remove(($UserRows | Where-Object { $_.Panel -eq $RowToRemove } | Select-Object -First 1))
+            $UsersPanel.Controls.Remove($RowToRemove)
+            & $RefreshRows
+        }.GetNewClosure())
+        $RowPanel.Controls.Add($RemoveButton)
+        $UsersPanel.Controls.Add($RowPanel)
+        & $RefreshRows
+    }.GetNewClosure()
+
+    if ($ConfiguredUsers -and $ConfiguredUsers.Count -gt 0) {
+        foreach ($ConfiguredUser in $ConfiguredUsers) {
+            & $AddUserRow ([string]$ConfiguredUser.Username) ([string]$ConfiguredUser.HAWebhookUrl)
+        }
+    }
+    else {
+        & $AddUserRow $DetectedUsername ""
+    }
+
+    $AddUserButton.Add_Click({
+        & $AddUserRow "" ""
+        $UsersPanel.ScrollControlIntoView($UsersPanel.Controls[$UsersPanel.Controls.Count - 1])
+    }.GetNewClosure())
 
     $InstallButton = New-Object System.Windows.Forms.Button
-    $InstallButton.Location = New-Object System.Drawing.Point(432, 344)
+    $InstallButton.Location = New-Object System.Drawing.Point(738, 654)
     $InstallButton.Size = New-Object System.Drawing.Size(110, 36)
-    $InstallButton.Text = "Install"
+    $InstallButton.Text = $Messages.Install
     $InstallButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
     $InstallButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
     $InstallButton.FlatAppearance.BorderSize = 0
@@ -170,9 +262,9 @@ function Show-InstallerDialog {
     $Form.Controls.Add($InstallButton)
 
     $CancelButton = New-Object System.Windows.Forms.Button
-    $CancelButton.Location = New-Object System.Drawing.Point(550, 344)
-    $CancelButton.Size = New-Object System.Drawing.Size(66, 36)
-    $CancelButton.Text = "Cancel"
+    $CancelButton.Location = New-Object System.Drawing.Point(814, 654)
+    $CancelButton.Size = New-Object System.Drawing.Size(62, 36)
+    $CancelButton.Text = $Messages.Cancel
     $CancelButton.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
     $CancelButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
     $CancelButton.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(205, 213, 224)
@@ -185,30 +277,51 @@ function Show-InstallerDialog {
     $Form.CancelButton = $CancelButton
 
     while ($Form.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-        $EnteredWebhookUrl = $WebhookInput.Text.Trim()
-        $ParsedWebhookUri = $null
-        if (
-            $EnteredWebhookUrl -notmatch '/api/webhook/[^/]+$' -or
-            -not [System.Uri]::TryCreate(
-                $EnteredWebhookUrl,
-                [System.UriKind]::Absolute,
-                [ref]$ParsedWebhookUri
-            ) -or
-            $ParsedWebhookUri.Scheme -notin @('http', 'https')
-        ) {
-            [System.Windows.Forms.MessageBox]::Show(
-                "Enter a valid Home Assistant webhook URL ending in /api/webhook/<id>.",
-                "Invalid webhook URL",
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Warning
-            ) | Out-Null
-            continue
+        $ValidatedUsers = @()
+        $SeenUsernames = @{}
+        $SeenWebhooks = @{}
+        $ValidationMessage = $null
+        foreach ($Row in $UserRows) {
+            $Username = $Row.UsernameInput.Text.Trim()
+            $WebhookUrl = $Row.WebhookInput.Text.Trim()
+            if ([string]::IsNullOrWhiteSpace($Username) -or
+                $Username -match '[\\/:*?"<>|]' -or
+                $Username -match '[ .]$' -or
+                $Username -in @(".", "..")) {
+                $ValidationMessage = $Messages.InvalidUsername
+                break
+            }
+            if ($SeenUsernames.ContainsKey($Username)) {
+                $ValidationMessage = $Messages.DuplicateUsername
+                break
+            }
+            $SeenUsernames[$Username] = $true
+
+            $ParsedWebhookUri = $null
+            if (
+                $WebhookUrl -notmatch '/api/webhook/[^/]+$' -or
+                -not [System.Uri]::TryCreate($WebhookUrl, [System.UriKind]::Absolute, [ref]$ParsedWebhookUri) -or
+                $ParsedWebhookUri.Scheme -notin @('http', 'https')
+            ) {
+                $ValidationMessage = $Messages.InvalidWebhook
+                break
+            }
+            if ($SeenWebhooks.ContainsKey($WebhookUrl)) {
+                $ValidationMessage = $Messages.DuplicateWebhook
+                break
+            }
+            $SeenWebhooks[$WebhookUrl] = $true
+            $ValidatedUsers += @{
+                Username = $Username
+                HAWebhookUrl = $WebhookUrl
+            }
         }
 
-        if ([string]::IsNullOrWhiteSpace($UsernameInput.Text)) {
+        if ($ValidationMessage) {
             [System.Windows.Forms.MessageBox]::Show(
-                "Enter the Windows username whose Teams log should be monitored.",
-                "Username required",
+                $Form,
+                $ValidationMessage,
+                $Messages.InvalidTitle,
                 [System.Windows.Forms.MessageBoxButtons]::OK,
                 [System.Windows.Forms.MessageBoxIcon]::Warning
             ) | Out-Null
@@ -216,8 +329,8 @@ function Show-InstallerDialog {
         }
 
         return @{
-            WebhookUrl = $EnteredWebhookUrl
-            Username = $UsernameInput.Text.Trim()
+            Users = $ValidatedUsers
+            UiLanguage = $UiLanguage
         }
     }
 
@@ -225,13 +338,32 @@ function Show-InstallerDialog {
 }
 
 $DetectedUsername = Get-InteractiveUsername
-$InstallerValues = Show-InstallerDialog -DetectedUsername $DetectedUsername
+$ConfiguredUsers = @()
+$PreviousSettingsPath = "C:\Scripts\TeamsStatus\Settings.ps1"
+if (Test-Path $PreviousSettingsPath) {
+    . $PreviousSettingsPath
+    if ($TeamsUsers) {
+        $ConfiguredUsers = @($TeamsUsers)
+    }
+    elseif ($HAWebhookUrl -and $LocalUsername) {
+        $ConfiguredUsers = @(@{
+            Username = $LocalUsername
+            HAWebhookUrl = $HAWebhookUrl
+        })
+    }
+}
+$UiLanguage = $DetectedUiLanguage
+$InstallerValues = Show-InstallerDialog `
+    -DetectedUsername $DetectedUsername `
+    -ConfiguredUsers $ConfiguredUsers `
+    -Messages $Messages
 if ($null -eq $InstallerValues) {
     exit
 }
 
-$HAWebhookUrl = $InstallerValues.WebhookUrl
-$LocalUsername = $InstallerValues.Username
+$TeamsUsers = @($InstallerValues.Users)
+$UiLanguage = $InstallerValues.UiLanguage
+$Messages = Get-TeamsMessages -Language $UiLanguage -Root $PSScriptRoot
 
 $Path = "C:\Scripts\TeamsStatus"
 if (-not (Test-Path $Path)) {
@@ -241,37 +373,48 @@ if (-not (Test-Path $Path)) {
 $ServiceName = "Microsoft Teams Status Monitor"
 $ExistingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($ExistingService -and $ExistingService.Status -ne 'Stopped') {
-    Write-Host "Stopping existing service..."
+    Write-Host $Messages.ServiceStopping
     Stop-Service -Name $ServiceName -Force
 }
 
-Copy-Item -Path "$PSScriptRoot\Settings.ps1" -Destination $Path
 $SettingsPath = "$Path\Settings.ps1"
-$SettingsContent = Get-Content $SettingsPath
-$SettingsContent = $SettingsContent | ForEach-Object {
-    if ($_ -match '^\$HAWebhookUrl\s*=') {
-        "`$HAWebhookUrl = `"$HAWebhookUrl`""
-    }
-    elseif ($_ -match '^\$LocalUsername\s*=') {
-        "`$LocalUsername = `"$LocalUsername`""
-    }
-    else {
-        $_
-    }
+function ConvertTo-PowerShellString {
+    param([string]$Value)
+    return "'" + $Value.Replace("'", "''") + "'"
 }
-$SettingsContent | Set-Content $SettingsPath
+$SettingsLines = @(
+    "# Generated by the Teams Busy Light installer."
+    "`$TeamsUsers = @("
+)
+foreach ($TeamsUser in $TeamsUsers) {
+    $SettingsLines += "    @{"
+    $SettingsLines += "        Username = $(ConvertTo-PowerShellString $TeamsUser.Username)"
+    $SettingsLines += "        HAWebhookUrl = $(ConvertTo-PowerShellString $TeamsUser.HAWebhookUrl)"
+    $SettingsLines += "    }"
+}
+$SettingsLines += ")"
+$SettingsLines += "`$UiLanguage = $(ConvertTo-PowerShellString $UiLanguage)"
+$SettingsLines += "`$TeamsLanguage = 'auto'"
+$SettingsLines += "`$HeartbeatSeconds = 60"
+Set-Content -Path $SettingsPath -Value $SettingsLines -Encoding UTF8
+
+Copy-Item -Path "$PSScriptRoot\Messages.ps1" -Destination $Path -Force
+if (-not (Test-Path "$Path\Translations")) {
+    New-Item -Path "$Path\Translations" -ItemType Directory | Out-Null
+}
+Copy-Item -Path "$PSScriptRoot\Translations\*.psd1" -Destination "$Path\Translations" -Force
 
 # Resolve the HA host via DNS servers configured on active LAN/Wi-Fi adapters
 # and add/update it in the hosts file.
-try {
-    $HAUrlForUri = $HAWebhookUrl
-    if ($HAUrlForUri -notmatch '^\w+://') {
-        $HAUrlForUri = "https://$HAUrlForUri"
+$HAHosts = @(
+    foreach ($TeamsUser in $TeamsUsers) {
+        ([System.Uri]$TeamsUser.HAWebhookUrl).Host
     }
+) | Select-Object -Unique
 
-    $HAHost = ([System.Uri]$HAUrlForUri).Host
+foreach ($HAHost in $HAHosts) {
+  try {
     $ResolvedIP = $null
-
     $ActiveAdapterAliases = Get-NetAdapter -Physical -ErrorAction SilentlyContinue |
         Where-Object {
             $_.Status -eq 'Up' -and (
@@ -326,7 +469,7 @@ try {
 
         if ($MatchingIndexes.Count -eq 0) {
             Add-Content -Path $HostsPath -Value $DesiredLine
-            Write-Host "Added hosts entry: $ResolvedIP $HAHost"
+            Write-Host ($Messages.HostsAdded -f $ResolvedIP, $HAHost)
         }
         else {
             $UpdatedLines = New-Object System.Collections.Generic.List[string]
@@ -345,15 +488,16 @@ try {
             }
 
             $UpdatedLines | Set-Content -Path $HostsPath
-            Write-Host "Updated hosts entry: $ResolvedIP $HAHost"
+            Write-Host ($Messages.HostsUpdated -f $ResolvedIP, $HAHost)
         }
     }
     else {
-        Write-Warning "Could not resolve IPv4 for $HAHost using DNS servers from active LAN/Wi-Fi adapters."
+        Write-Warning ($Messages.DnsFailed -f $HAHost)
     }
-}
-catch {
-    Write-Warning "Could not add hosts entry for '$HAWebhookUrl'. Run as Administrator and verify the URL. Error: $($_.Exception.Message)"
+  }
+  catch {
+    Write-Warning ($Messages.HostsFailed -f $HAHost, $_.Exception.Message)
+  }
 }
 
 Copy-Item -Path "$PSScriptRoot\Get-TeamsStatus.ps1" -Destination $Path
@@ -364,14 +508,15 @@ Copy-Item -Path "$PSScriptRoot\nssm.exe" -Destination $Path
 Unblock-File $Path\Settings.ps1
 Unblock-File $Path\Languages.ps1
 Unblock-File $Path\Get-TeamsStatus.ps1
+Unblock-File $Path\Messages.ps1
 if (-not $ExistingService) {
     Start-Process -FilePath $Path\nssm.exe -ArgumentList 'install "Microsoft Teams Status Monitor" "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" "-command "& { . C:\Scripts\TeamsStatus\Get-TeamsStatus.ps1 }"" ' -NoNewWindow -Wait
 }
 Start-Service -Name $ServiceName
 
 [System.Windows.Forms.MessageBox]::Show(
-    "Teams Busy Light was installed and the status monitor service was started.",
-    "Installation complete",
+    $Messages.InstallComplete,
+    $Messages.CompleteTitle,
     [System.Windows.Forms.MessageBoxButtons]::OK,
     [System.Windows.Forms.MessageBoxIcon]::Information
 ) | Out-Null
