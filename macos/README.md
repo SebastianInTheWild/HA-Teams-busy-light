@@ -41,8 +41,8 @@ bash install.sh
 The installer asks for the webhook URL and
 
 * copies the script and `settings.sh` to `~/Library/Application Support/TeamsBusyLight`,
-* creates the small background app `~/Applications/Teams Busy Light.app` (no Dock icon)
-  that runs the script,
+* creates the small background app `~/Applications/Teams Busy Light.app` (no Dock icon,
+  with the Teams Busy Light icon from `icon.png`) that runs the script,
 * starts it now and after every login (LaunchAgent `com.teamsbusylight.agent`).
 
 **macOS asks twice for "Teams Busy Light" – click Allow both times:**

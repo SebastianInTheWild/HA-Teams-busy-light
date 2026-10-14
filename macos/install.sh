@@ -16,7 +16,7 @@ APP="$HOME/Applications/Teams Busy Light.app"
 APP_ID="com.teamsbusylight.app"
 # Increase when the app itself changes; the app is then rebuilt and macOS asks
 # for its permissions again
-APP_BUILD="2"
+APP_BUILD="3"
 LABEL="com.teamsbusylight.agent"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG="$HOME/Library/Logs/TeamsBusyLight.log"
@@ -84,6 +84,22 @@ end try'
     # Name shown in permission prompts (e.g. local network) instead of "applet"
     plutil -replace CFBundleDisplayName -string "Teams Busy Light" "$APP/Contents/Info.plist"
     plutil -replace TeamsBusyLightBuild -string "$APP_BUILD" "$APP/Contents/Info.plist"
+    # App icon from icon.png (the brand icon of the integration). Newer
+    # osacompile versions add an asset catalog that would take precedence.
+    if [ -f "$SRC/icon.png" ]; then
+        ICONSET="$(mktemp -d)/applet.iconset"
+        mkdir -p "$ICONSET"
+        for size in 16 32 128 256 512; do
+            sips -z "$size" "$size" "$SRC/icon.png" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
+            if [ "$size" -le 256 ]; then
+                sips -z $((size * 2)) $((size * 2)) "$SRC/icon.png" --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
+            fi
+        done
+        iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/applet.icns"
+        rm -rf "$(dirname "$ICONSET")" "$APP/Contents/Resources/Assets.car"
+        plutil -remove CFBundleIconName "$APP/Contents/Info.plist" 2>/dev/null || true
+        plutil -replace CFBundleIconFile -string applet "$APP/Contents/Info.plist"
+    fi
     codesign --force --sign - "$APP"
 fi
 
