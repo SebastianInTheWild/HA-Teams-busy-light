@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1
+
+* Brand icon resized to 256×256 (`icon.png`) and 512×512 (`icon@2x.png`), shown in Home Assistant and HACS
+* Requires Home Assistant 2026.3.0 or newer (local brand icons)
+* README: link to the HACS installation guide
+
 ## 1.1.0
 
 * Windows: new `Uninstall.ps1` removes the Teams status service and the installed files

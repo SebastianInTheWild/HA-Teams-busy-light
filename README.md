@@ -25,6 +25,9 @@ Click the buttons to open the matching page **in your own Home Assistant**
 
 ### 1. Install the integration
 
+Requires Home Assistant 2026.3 or newer and [HACS](https://hacs.xyz/).
+HACS not installed yet? Follow the [HACS installation guide](https://hacs.xyz/docs/use/download/download/).
+
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=SebastianInTheWild&repository=HA-Teams-busy-light&category=integration)
 
 Download **Teams Busy Light** in HACS and restart Home Assistant.
