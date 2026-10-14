@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local files that may contain secrets or personal config
+temp.txt
+template.yaml.txt
+*.local.ps1
+*.local.sh

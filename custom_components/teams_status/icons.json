@@ -1,0 +1,29 @@
+{
+  "entity": {
+    "sensor": {
+      "status": {
+        "default": "mdi:microsoft-teams",
+        "state": {
+          "available": "mdi:check-circle",
+          "busy": "mdi:minus-circle",
+          "in_a_call": "mdi:phone-in-talk",
+          "in_a_meeting": "mdi:account-group",
+          "presenting": "mdi:presentation",
+          "focusing": "mdi:target",
+          "do_not_disturb": "mdi:minus-circle-off",
+          "be_right_back": "mdi:clock-outline",
+          "away": "mdi:clock-outline",
+          "offline": "mdi:close-circle-outline"
+        }
+      },
+      "activity": {
+        "default": "mdi:phone-off",
+        "state": {
+          "in_call": "mdi:phone-in-talk",
+          "incoming_call": "mdi:phone-ring",
+          "outgoing_call": "mdi:phone-outgoing"
+        }
+      }
+    }
+  }
+}

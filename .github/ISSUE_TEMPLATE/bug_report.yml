@@ -1,0 +1,39 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows
+        - Home Assistant integration / blueprint
+    validations:
+      required: true
+  - type: input
+    id: teams_language
+    attributes:
+      label: Language of the Teams app
+      placeholder: German
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+      placeholder: "2026.10.1"
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What did you expect, what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log lines
+      description: >-
+        Script output,
+        Home Assistant log and/or matching lines from MSTeams_*.log.
+        Please remove personal data and never post your webhook URL.
+      render: text

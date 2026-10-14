@@ -1,0 +1,36 @@
+name: Status not recognized / new language
+description: A Teams status is not detected, or support for another Teams language
+labels: [language]
+body:
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows
+    validations:
+      required: true
+  - type: input
+    id: teams_language
+    attributes:
+      label: Language of the Teams app
+      placeholder: French
+    validations:
+      required: true
+  - type: input
+    id: status
+    attributes:
+      label: Status set in Teams
+      placeholder: Do not disturb
+    validations:
+      required: true
+  - type: textarea
+    id: lines
+    attributes:
+      label: Log lines
+      description: >-
+        Set the status in Teams, then copy the newest lines containing
+        SetTaskbarIconOverlay or SetBadge from MSTeams_*.log. Remove personal data.
+      render: text
+    validations:
+      required: true

@@ -1,0 +1,72 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Teams Busy Light",
+        "description": "Erstellt einen Webhook, der den Teams-Status vom Windows-Skript (Get-TeamsStatus.ps1) empfängt.",
+        "data": {
+          "name": "Name"
+        },
+        "data_description": {
+          "name": "Name des Geräts. Mit „Teams“ heißen die Entitäten sensor.teams_status und sensor.teams_activity."
+        }
+      }
+    },
+    "create_entry": {
+      "default": "Fertig! Gib diese Webhook-URL bei Install.ps1 auf deinem Windows-Rechner ein:\n\n`{webhook_url}`\n\nDu findest sie später auch in den Optionen der Integration."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Teams Busy Light",
+        "description": "Webhook-URL für Install.ps1 / Settings.ps1:\n\n`{webhook_url}`",
+        "data": {
+          "timeout": "Timeout"
+        },
+        "data_description": {
+          "timeout": "Teams auf Offline setzen, wenn sich der Rechner so viele Sekunden nicht gemeldet hat (z. B. weil er ausgeschaltet ist). 0 deaktiviert das."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "available": "Verfügbar",
+          "busy": "Beschäftigt",
+          "in_a_call": "Im Anruf",
+          "in_a_meeting": "In einer Besprechung",
+          "presenting": "Präsentiert",
+          "focusing": "Konzentriert",
+          "do_not_disturb": "Nicht stören",
+          "be_right_back": "Bin gleich zurück",
+          "away": "Abwesend",
+          "offline": "Offline"
+        },
+        "state_attributes": {
+          "computer": {
+            "name": "Computer"
+          },
+          "teams_language": {
+            "name": "Teams-Sprache"
+          },
+          "last_seen": {
+            "name": "Zuletzt gemeldet"
+          }
+        }
+      },
+      "activity": {
+        "name": "Aktivität",
+        "state": {
+          "not_in_call": "Kein Anruf",
+          "in_call": "Im Anruf",
+          "incoming_call": "Eingehender Anruf",
+          "outgoing_call": "Ausgehender Anruf"
+        }
+      }
+    }
+  }
+}
