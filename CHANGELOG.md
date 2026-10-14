@@ -5,6 +5,7 @@
 * macOS support: `macos/install.sh` installs a background app that sends the Teams status and call state to the integration; no administrator rights needed
 * Windows: `Install.cmd` starts the installer as administrator without a PowerShell console
 * Windows: installer window and taskbar show the current Teams Busy Light icon
+* Integration: the webhook URL uses the address Home Assistant is currently opened with (e.g. the local address) instead of always the external URL
 
 ## 1.1.2
 

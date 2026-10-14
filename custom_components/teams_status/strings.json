@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Teams Busy Light",
-        "description": "Creates a webhook that receives the Teams status from the Windows script (Get-TeamsStatus.ps1).",
+        "description": "Creates a webhook that receives the Teams status from the script on your Windows PC or Mac.",
         "data": {
           "name": "Name suffix"
         },
@@ -13,14 +13,14 @@
       }
     },
     "create_entry": {
-      "default": "Done! Enter this webhook URL when running Install.ps1 on your Windows computer:\n\n`{webhook_url}`\n\nYou can view it again in the integration options."
+      "default": "Done! Enter this webhook URL in the installer on your computer (Windows: Install.cmd, macOS: install.sh):\n\n`{webhook_url}`\n\nYou can view it again in the integration options."
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Teams Busy Light",
-        "description": "Webhook URL for Install.ps1 / Settings.ps1:\n\n`{webhook_url}`",
+        "description": "Webhook URL for the installer (Windows: Install.cmd, macOS: install.sh):\n\n`{webhook_url}`",
         "data": {
           "timeout": "Timeout"
         },

@@ -15,6 +15,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_NAME, CONF_WEBHOOK_ID
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.http import current_request
 from homeassistant.helpers.network import NoURLAvailableError
 from homeassistant.helpers.selector import (
     NumberSelector,
@@ -26,11 +27,18 @@ from .const import CONF_TIMEOUT, DEFAULT_NAME, DEFAULT_TIMEOUT, DOMAIN
 
 
 def _webhook_url(hass: HomeAssistant, webhook_id: str) -> str:
-    """Return the URL the Windows script has to post to."""
+    """Return the URL the Windows/macOS script has to post to.
+
+    Uses the address Home Assistant is currently opened with in the browser,
+    so a computer in the same network gets the same (e.g. local) address.
+    """
+    path = webhook.async_generate_path(webhook_id)
+    if (request := current_request.get()) is not None:
+        return f"{request.url.origin()}{path}"
     try:
         return webhook.async_generate_url(hass, webhook_id)
     except NoURLAvailableError:
-        return f"https://<your-home-assistant>{webhook.async_generate_path(webhook_id)}"
+        return f"https://<your-home-assistant>{path}"
 
 
 class TeamsStatusConfigFlow(ConfigFlow, domain=DOMAIN):
