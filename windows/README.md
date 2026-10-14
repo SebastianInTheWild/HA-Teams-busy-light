@@ -58,15 +58,15 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
 .\Install.ps1
 ```
 
-The installer will prompt you for:
+The installer opens a window where you enter:
 
 * Home Assistant webhook URL (`https://.../api/webhook/...`)
-* Local Windows username (optional, press Enter for auto-detect)
+* Local Windows username (pre-filled from the signed-in user and editable)
 
 What `Install.ps1` does:
 
 * Automatically elevates to Administrator if required
-* Auto-detects the signed-in username when left empty (with fallbacks)
+* Pre-fills the signed-in username (with fallbacks)
 * Writes values into `C:\Scripts\TeamsStatus\Settings.ps1`
 * Resolves the Home Assistant DNS name from the webhook URL using DNS servers from active LAN/Wi-Fi adapters
 * Adds or updates the resolved mapping in the Windows hosts file (`%windir%\System32\drivers\etc\hosts`)
@@ -97,4 +97,4 @@ Get-Service -Name "Microsoft Teams Status Monitor"
 * If hosts update fails, confirm the UAC elevation prompt was accepted
 * If DNS resolution fails, verify network adapter DNS settings and HA DNS record
 * If the status is not recognized, look at the `SetTaskbarIconOverlay` / `SetBadge` lines in the Teams log and add the wording to `Languages.ps1`
-* If username auto-detection picks the wrong user on shared systems, rerun `Install.ps1` and enter the username manually
+* If username auto-detection picks the wrong user on shared systems, rerun `Install.ps1` and edit the username in the installer window

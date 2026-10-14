@@ -59,12 +59,12 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
 .\Install.ps1
 ```
 
-The installer asks for the webhook URL from step 2 and installs the
+The installer opens a window for the webhook URL and Windows username. It then installs the
 `Microsoft Teams Status Monitor` service. Details: [windows/README.md](windows/README.md)
 
 ### 4. Busy light automation
 
-[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FSebastianInTheWild%2FHA-Teams-busy-light%2Fmain%2Fblueprints%2Fautomation%2Fteams_status%2Fteams_busy_light.yaml)
+[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FSebastianInTheWild%2FHA-Teams-busy-light%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fteams_status%2Fteams_busy_light.yaml)
 
 Import the blueprint, then create an automation from it – **only the lights have to be
 selected**. Colors, brightness and the Teams sensors can be changed in the collapsed sections.
