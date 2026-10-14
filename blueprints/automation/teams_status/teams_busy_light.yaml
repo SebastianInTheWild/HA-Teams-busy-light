@@ -30,14 +30,12 @@ blueprint:
       input:
         status_sensor:
           name: Status-Sensor
-          default: sensor.teams_status
           selector:
             entity:
               integration: teams_status
               domain: sensor
         activity_sensor:
           name: Aktivitäts-Sensor
-          default: sensor.teams_activity
           selector:
             entity:
               integration: teams_status
@@ -81,15 +79,26 @@ mode: restart
 max_exceeded: silent
 
 triggers:
-  # to: null ignores attribute-only changes (e.g. the keep-alive "last_seen")
   - trigger: state
     entity_id: !input status_sensor
-    to: null
-    not_to: [unavailable, unknown]
+    to:
+      - available
+      - busy
+      - in_a_call
+      - in_a_meeting
+      - presenting
+      - focusing
+      - do_not_disturb
+      - be_right_back
+      - away
+      - offline
   - trigger: state
     entity_id: !input activity_sensor
-    to: null
-    not_to: [unavailable, unknown]
+    to:
+      - not_in_call
+      - in_call
+      - incoming_call
+      - outgoing_call
 
 actions:
   - choose:
