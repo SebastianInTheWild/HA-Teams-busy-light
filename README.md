@@ -1,6 +1,7 @@
 # Teams Busy Light
 
 [![Validate](https://github.com/SebastianInTheWild/HA-Teams-busy-light/actions/workflows/validate.yml/badge.svg)](https://github.com/SebastianInTheWild/HA-Teams-busy-light/actions/workflows/validate.yml)
+[![Release](https://img.shields.io/github/v/release/SebastianInTheWild/HA-Teams-busy-light)](https://github.com/SebastianInTheWild/HA-Teams-busy-light/releases/latest)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/docs/faq/custom_repositories/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
