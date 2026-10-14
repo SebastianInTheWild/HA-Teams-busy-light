@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.2
+
+* Brand icon: red dot in the corner shows the busy light
+
 ## 1.1.1
 
 * Brand icon resized to 256×256 (`icon.png`) and 512×512 (`icon@2x.png`), shown in Home Assistant and HACS
