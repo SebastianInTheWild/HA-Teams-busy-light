@@ -45,9 +45,11 @@ The installer asks for the webhook URL and
   that runs the script,
 * starts it now and after every login (LaunchAgent `com.teamsbusylight.agent`).
 
-**When macOS asks whether "Teams Busy Light" may access data from other apps, click
-Allow.** The Teams logs are stored in the protected data of the Teams app; the access is
-granted only to this app, not to Terminal or bash.
+**macOS asks twice for "Teams Busy Light" – click Allow both times:**
+
+* **Access data from other apps:** the Teams logs are stored in the protected data of the
+  Teams app; the access is granted only to this app, not to Terminal or bash.
+* **Find devices on your local network:** needed to reach Home Assistant in your network.
 
 Run `bash install.sh` again to update the script or change the URL (press Enter to keep
 it). Your `settings.sh` and the granted access are kept.
@@ -90,6 +92,8 @@ After changing settings, run `bash install.sh` again to restart.
   the Teams data. Add `~/Applications/Teams Busy Light.app` under System Settings →
   Privacy & Security → Full Disk Access (press `cmd`+`shift`+`G` to enter the path), then
   run `bash install.sh` again.
+* **Log shows `Failed to send status to Home Assistant`:** check that "Teams Busy Light"
+  is allowed under System Settings → Privacy & Security → Local Network.
 * **`Unknown Teams presence: …` in the log:** Teams logged a value the script does not
   know yet. Please [open an issue](https://github.com/SebastianInTheWild/HA-Teams-busy-light/issues/new/choose)
   with that value.

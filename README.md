@@ -83,7 +83,8 @@ bash install.sh
 ```
 
 No administrator rights are needed. When macOS asks whether "Teams Busy Light" may access
-data from other apps, click **Allow**. Remove it later with `bash uninstall.sh`.
+data from other apps and find devices on your local network, click **Allow** both times.
+Remove it later with `bash uninstall.sh`.
 Details: [macos/README.md](macos/README.md)
 
 The Mac does not detect ringing separately; the activity switches to `in_call` when the

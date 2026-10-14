@@ -14,6 +14,9 @@ SRC="$(cd "$(dirname "$0")" && pwd)"
 DEST="$HOME/Library/Application Support/TeamsBusyLight"
 APP="$HOME/Applications/Teams Busy Light.app"
 APP_ID="com.teamsbusylight.app"
+# Increase when the app itself changes; the app is then rebuilt and macOS asks
+# for its permissions again
+APP_BUILD="2"
 LABEL="com.teamsbusylight.agent"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG="$HOME/Library/Logs/TeamsBusyLight.log"
@@ -64,8 +67,8 @@ chmod +x "$DEST/teams-busy-light.sh"
 xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
 
 # Build the app once; rebuilding would change its signature and macOS would
-# ask for the access again. An incomplete app (without our identifier) is rebuilt.
-if [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist" 2>/dev/null)" != "$APP_ID" ]; then
+# ask for the access again. An incomplete or older app is rebuilt.
+if [ "$(/usr/libexec/PlistBuddy -c 'Print :TeamsBusyLightBuild' "$APP/Contents/Info.plist" 2>/dev/null)" != "$APP_BUILD" ]; then
     rm -rf "$APP"
     echo "Creating $APP"
     # $HOME is expanded by the shell that "do shell script" starts
@@ -78,6 +81,9 @@ end try'
     plutil -replace LSUIElement -bool YES "$APP/Contents/Info.plist"
     plutil -replace CFBundleIdentifier -string "$APP_ID" "$APP/Contents/Info.plist"
     plutil -replace CFBundleName -string "Teams Busy Light" "$APP/Contents/Info.plist"
+    # Name shown in permission prompts (e.g. local network) instead of "applet"
+    plutil -replace CFBundleDisplayName -string "Teams Busy Light" "$APP/Contents/Info.plist"
+    plutil -replace TeamsBusyLightBuild -string "$APP_BUILD" "$APP/Contents/Info.plist"
     codesign --force --sign - "$APP"
 fi
 
@@ -119,4 +125,5 @@ echo "Installed to: $DEST"
 echo "App:          $APP"
 echo "Log file:     $LOG"
 echo "Teams Busy Light is running and starts automatically after login."
-echo "If macOS asks whether \"Teams Busy Light\" may access data from other apps, click Allow."
+echo "If macOS asks whether \"Teams Busy Light\" may access data from other apps or find"
+echo "devices on your local network, click Allow."
