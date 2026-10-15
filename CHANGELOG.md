@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+* Blueprint: optionally play music or radio on a media player; stop during calls and while offline
+
 ## 1.2.0
 
 * macOS support: `macos/install.sh` installs a background app that sends the Teams status and call state to the integration; no administrator rights needed

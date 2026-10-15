@@ -94,8 +94,12 @@ call starts.
 
 [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FSebastianInTheWild%2FHA-Teams-busy-light%2Fmain%2Fblueprints%2Fautomation%2Fteams_status%2Fteams_busy_light.yaml)
 
-Import the blueprint, then create an automation from it – **only the lights have to be
-selected**. Colors, brightness and the Teams sensors can be changed in the collapsed sections.
+Import the blueprint, then create an automation from it. Lights are required; optionally,
+enable **Optional music or radio** and select a media player, media content ID (a media
+source ID or URL) and media type. Playback starts whenever Teams is not in a call or
+offline, stops during calls or while offline, and resumes when the call ends or Teams
+comes back online. The speaker itself is left on when playback stops. Colors, brightness
+and the Teams sensors can be changed in the collapsed sections.
 
 Or import it manually under **Settings → Automations & scenes → Blueprints → Import blueprint**
 with this URL:

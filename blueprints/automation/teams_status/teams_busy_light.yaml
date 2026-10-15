@@ -6,7 +6,8 @@ blueprint:
     Do not disturb/Presenting/Focusing = red (custom color possible),
     Away/Be right back = orange, Offline = off.
     When setting up the integration, "Teams" is added in front of the
-    entered name automatically. Only the lights have to be selected.
+    entered name automatically. Optionally, music or radio can be played on
+    a media player whenever Teams is not in a call or offline.
   domain: automation
   source_url: https://github.com/SebastianInTheWild/HA-Teams-busy-light/blob/main/blueprints/automation/teams_status/teams_busy_light.yaml
   homeassistant:
@@ -73,6 +74,38 @@ blueprint:
           default: [252, 150, 0]
           selector:
             color_rgb: {}
+    audio:
+      name: Optional music or radio
+      icon: mdi:speaker
+      collapsed: true
+      input:
+        enable_audio:
+          name: Enable music or radio
+          description: Configure the speaker and media below when enabled.
+          default: false
+          selector:
+            boolean: {}
+        speaker:
+          name: Smart speaker
+          description: Required when music or radio playback is enabled.
+          default: ""
+          selector:
+            entity:
+              domain: media_player
+        media_content_id:
+          name: Media content ID
+          description: Required to start playback; use a media source ID or URL supported by the selected speaker.
+          default: ""
+          selector:
+            text: {}
+        media_content_type:
+          name: Media type
+          default: music
+          selector:
+            select:
+              options:
+                - music
+                - radio
 
 # The newest Teams state always wins
 mode: restart
@@ -159,3 +192,48 @@ actions:
             data:
               rgb_color: !input color_available
               brightness_pct: !input brightness
+  - variables:
+      audio_enabled: !input enable_audio
+      speaker_entity: !input speaker
+      media_content_id: !input media_content_id
+      status_entity: !input status_sensor
+      activity_entity: !input activity_sensor
+  - choose:
+      - alias: Stop music during calls or offline
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ audio_enabled and (speaker_entity | length > 0) }}
+          - condition: or
+            conditions:
+              - condition: state
+                entity_id: !input status_sensor
+                state: [in_a_call, offline]
+              - condition: state
+                entity_id: !input activity_sensor
+                state: [in_call, incoming_call, outgoing_call]
+        sequence:
+          - action: media_player.media_stop
+            target:
+              entity_id: !input speaker
+      - alias: Play music outside calls and offline
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ audio_enabled and (speaker_entity | length > 0) and
+                 (media_content_id | length > 0) }}
+          - condition: template
+            value_template: "{{ states(speaker_entity) != 'playing' }}"
+          - condition: template
+            value_template: >-
+              {{ not is_state(status_entity, 'in_a_call') and
+                 not is_state(status_entity, 'offline') and
+                 states(activity_entity) not in
+                 ['in_call', 'incoming_call', 'outgoing_call'] }}
+        sequence:
+          - action: media_player.play_media
+            target:
+              entity_id: !input speaker
+            data:
+              media_content_id: !input media_content_id
+              media_content_type: !input media_content_type
