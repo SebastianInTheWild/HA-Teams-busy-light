@@ -1,170 +1,71 @@
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
+<#
+.SYNOPSIS
+    Removes Teams Busy Light for the signed-in Windows user.
+.DESCRIPTION
+    Stops the app and removes it from the Windows sign-in, the Start menu and
+    "Installed apps", and deletes its program files, settings and log.
+    Optionally removes its hosts file entries and the Windows service of
+    earlier versions (both with a UAC prompt). The Home Assistant integration
+    entry is not changed.
+    Can also be started from Settings > Apps > Installed apps.
+#>
+. (Join-Path $PSScriptRoot 'Common.ps1')
+$Messages = Get-TeamsMessages
+Add-Type -AssemblyName System.Windows.Forms
 
-$DetectedUiLanguage = [System.Globalization.CultureInfo]::CurrentUICulture.TwoLetterISOLanguageName
-$LanguageCode = $DetectedUiLanguage.ToLowerInvariant().Split('-')[0]
-$TranslationPath = Join-Path $PSScriptRoot "Translations\$LanguageCode.psd1"
-if (-not (Test-Path $TranslationPath)) {
-    $TranslationPath = Join-Path $PSScriptRoot "Translations\en.psd1"
-}
-if (-not (Test-Path $TranslationPath)) {
-    throw "No English fallback translation found under '$PSScriptRoot\Translations'."
-}
-$Messages = Import-PowerShellDataFile -Path $TranslationPath
+$Title = $Messages.AppName
+$YesNo = [System.Windows.Forms.MessageBoxButtons]::YesNo
+$Question = [System.Windows.Forms.MessageBoxIcon]::Question
+$Yes = [System.Windows.Forms.DialogResult]::Yes
 
-$CurrentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
-$CurrentPrincipal = New-Object Security.Principal.WindowsPrincipal($CurrentIdentity)
-if (-not $CurrentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    if ([string]::IsNullOrWhiteSpace($PSCommandPath)) {
-        throw $Messages.SaveAndRun
-    }
-
-    Write-Host $Messages.Elevating
-    $ElevatedArguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $PSCommandPath + '"'
-    Start-Process -FilePath 'powershell.exe' -ArgumentList $ElevatedArguments -Verb RunAs
+if ([System.Windows.Forms.MessageBox]::Show($Messages.ConfirmUninstall, $Title, $YesNo, $Question) -ne $Yes) {
     exit
 }
 
-$InstallPath = 'C:\Scripts\TeamsStatus'
-$SettingsPath = Join-Path $InstallPath 'Settings.ps1'
-$ServiceName = 'Microsoft Teams Status Monitor'
+$Settings = Read-TeamsSettings
+Stop-TeamsBusyLight
 
-if ((Read-Host $Messages.ConfirmUninstall) -notin @('Y', 'y', 'J', 'j')) {
-    Write-Host $Messages.Cancelled
-    exit
+# Steps that need administrator rights, only after asking
+$AdminArguments = @()
+if ($Settings.WebhookUrl) {
+    $HostName = ([System.Uri]$Settings.WebhookUrl).Host
+    $HostsPath = Join-Path $env:windir 'System32\drivers\etc\hosts'
+    $Tagged = Get-Content -Path $HostsPath -ErrorAction SilentlyContinue |
+        Where-Object { $_ -match "\s$([regex]::Escape($HostName))\s+# Teams Busy Light\s*$" }
+    if ($Tagged -and [System.Windows.Forms.MessageBox]::Show($Messages.UninstallHosts, $Title, $YesNo, $Question) -eq $Yes) {
+        $AdminArguments += '-RemoveHost', $HostName
+    }
+}
+if ((Get-Service -Name 'Microsoft Teams Status Monitor' -ErrorAction SilentlyContinue) -and
+    [System.Windows.Forms.MessageBox]::Show($Messages.UninstallLegacy, $Title, $YesNo, $Question) -eq $Yes) {
+    $AdminArguments += '-RemoveLegacy'
+}
+if ($AdminArguments) {
+    # Run a copy, as the program folder is removed below
+    $AdminCopy = Join-Path $env:TEMP 'TeamsBusyLight-Uninstall'
+    New-Item -Path (Join-Path $AdminCopy 'Translations') -ItemType Directory -Force | Out-Null
+    foreach ($File in 'AdminTasks.ps1', 'Common.ps1', 'Languages.ps1') {
+        Copy-Item -Path (Join-Path $PSScriptRoot $File) -Destination $AdminCopy -Force
+    }
+    Copy-Item -Path (Join-Path $PSScriptRoot 'Translations\*.json') -Destination (Join-Path $AdminCopy 'Translations') -Force
+    try {
+        $Arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', ('"{0}"' -f (Join-Path $AdminCopy 'AdminTasks.ps1'))) + $AdminArguments
+        Start-Process -FilePath 'powershell.exe' -ArgumentList $Arguments -Verb RunAs -Wait
+    }
+    catch {
+        Write-Verbose "UAC prompt declined: $($_.Exception.Message)"
+    }
+    Remove-Item -LiteralPath $AdminCopy -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-$HAHosts = @()
-if (Test-Path $SettingsPath) {
-    $SettingsText = Get-Content -Path $SettingsPath -Raw -ErrorAction Stop
-    $WebhookMatches = [regex]::Matches(
-        $SettingsText,
-        'HAWebhookUrl\s*=\s*([''"])(?<url>.*?)\1',
-        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
-    )
-    foreach ($Match in $WebhookMatches) {
-        $WebhookUri = $null
-        if ([System.Uri]::TryCreate($Match.Groups['url'].Value, [System.UriKind]::Absolute, [ref]$WebhookUri) -and
-            $WebhookUri.Scheme -in @('http', 'https')) {
-            $HAHosts += $WebhookUri.Host
-        }
-    }
-    $HAHosts = @($HAHosts | Select-Object -Unique)
-}
-
-$Service = Get-CimInstance Win32_Service -Filter "Name='$ServiceName'" -ErrorAction SilentlyContinue
-if ($Service) {
-    $ExpectedNssmPath = Join-Path $InstallPath 'nssm.exe'
-    $ExpectedServicePathPattern = '^\s*"?{0}"?(\s|$)' -f [regex]::Escape($ExpectedNssmPath)
-    if ($Service.PathName -notmatch $ExpectedServicePathPattern) {
-        throw ($Messages.ServicePathMismatch -f $ServiceName, $Service.PathName)
-    }
-
-    if ($Service.State -ne 'Stopped') {
-        Stop-Service -Name $ServiceName -Force -PassThru -ErrorAction Stop |
-            ForEach-Object { $_.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30)) }
-    }
-
-    if (Test-Path $ExpectedNssmPath) {
-        & $ExpectedNssmPath remove $ServiceName confirm | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            throw ($Messages.ServiceRemovalFailed -f $ServiceName, $LASTEXITCODE)
-        }
-    }
-    else {
-        & sc.exe delete $ServiceName | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            throw ($Messages.ServiceRemovalFailed -f $ServiceName, $LASTEXITCODE)
-        }
-    }
-
-    $Deadline = (Get-Date).AddSeconds(10)
-    do {
-        Start-Sleep -Milliseconds 250
-        $RemainingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
-    } while ($RemainingService -and (Get-Date) -lt $Deadline)
-
-    if ($RemainingService) {
-        throw ($Messages.ServiceStillExists -f $ServiceName)
+Set-TeamsAutostart $false
+Remove-Item -LiteralPath $StartMenuShortcut -Force -ErrorAction SilentlyContinue
+Remove-Item -Path $UninstallKey -Recurse -Force -ErrorAction SilentlyContinue
+Set-Location -Path $env:TEMP
+foreach ($Folder in $ProgramDir, $DataDir) {
+    if (Test-Path $Folder) {
+        Remove-Item -LiteralPath $Folder -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 
-$HostsPath = Join-Path $env:windir 'System32\drivers\etc\hosts'
-if (Test-Path $HostsPath) {
-    $HostsLines = @(Get-Content -Path $HostsPath -ErrorAction Stop)
-    $TaggedLines = New-Object System.Collections.Generic.List[int]
-    $LegacyLines = New-Object System.Collections.Generic.List[int]
-    $NormalizedHosts = @($HAHosts | ForEach-Object { $_.ToLowerInvariant() })
-
-    for ($Index = 0; $Index -lt $HostsLines.Count; $Index++) {
-        $Parts = $HostsLines[$Index] -split '#', 2
-        $Tokens = @($Parts[0] -split '\s+' | Where-Object { $_ })
-        if ($Tokens.Count -lt 2) { continue }
-
-        $HasConfiguredHost = $false
-        foreach ($HostName in $Tokens | Select-Object -Skip 1) {
-            if ($HostName.ToLowerInvariant() -in $NormalizedHosts) {
-                $HasConfiguredHost = $true
-                break
-            }
-        }
-        if (-not $HasConfiguredHost) { continue }
-
-        if ($Parts.Count -gt 1 -and $Parts[1] -match '^\s*Teams Busy Light\s*$') {
-            $TaggedLines.Add($Index)
-        }
-        else {
-            $LegacyLines.Add($Index)
-        }
-    }
-
-    $RemoveLegacyHosts = $false
-    if ($LegacyLines.Count -gt 0 -and $NormalizedHosts.Count -gt 0) {
-        $HostList = $NormalizedHosts -join ', '
-        Write-Host ($Messages.LegacyHostsFound -f $HostList)
-        $RemoveLegacyHosts = (Read-Host $Messages.RemoveLegacyHosts) -in @('Y', 'y', 'J', 'j')
-    }
-
-    if ($TaggedLines.Count -gt 0 -or ($RemoveLegacyHosts -and $LegacyLines.Count -gt 0)) {
-        $TaggedIndexSet = @{}
-        foreach ($Index in $TaggedLines) {
-            $TaggedIndexSet[$Index] = $true
-        }
-        $LegacyIndexSet = @{}
-        foreach ($Index in $LegacyLines) {
-            $LegacyIndexSet[$Index] = $true
-        }
-
-        $RemainingLines = for ($Index = 0; $Index -lt $HostsLines.Count; $Index++) {
-            if ($TaggedIndexSet.ContainsKey($Index)) { continue }
-            if (-not $RemoveLegacyHosts -or -not $LegacyIndexSet.ContainsKey($Index)) {
-                $HostsLines[$Index]
-                continue
-            }
-
-            $Parts = $HostsLines[$Index] -split '#', 2
-            $Tokens = @($Parts[0] -split '\s+' | Where-Object { $_ })
-            $RemainingAliases = @(
-                $Tokens | Select-Object -Skip 1 |
-                    Where-Object { $_.ToLowerInvariant() -notin $NormalizedHosts }
-            )
-            if ($RemainingAliases.Count -eq 0) { continue }
-
-            $Line = (@($Tokens[0]) + $RemainingAliases) -join "`t"
-            if ($Parts.Count -gt 1) {
-                $Line += "`t#$($Parts[1])"
-            }
-            $Line
-        }
-        Set-Content -Path $HostsPath -Value $RemainingLines -Encoding UTF8 -ErrorAction Stop
-    }
-}
-
-if (Test-Path $InstallPath) {
-    $ResolvedInstallPath = [System.IO.Path]::GetFullPath($InstallPath).TrimEnd('\')
-    if ($ResolvedInstallPath -ne 'C:\Scripts\TeamsStatus') {
-        throw ($Messages.UnsafeInstallPath -f $ResolvedInstallPath)
-    }
-    Remove-Item -LiteralPath $ResolvedInstallPath -Recurse -Force -ErrorAction Stop
-}
-
-Write-Host $Messages.UninstallComplete
+[void][System.Windows.Forms.MessageBox]::Show($Messages.UninstallComplete, $Title, [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
