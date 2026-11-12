@@ -37,7 +37,8 @@ ACLs (normale Benutzer konnten die Skripte ändern) – entfällt mit der neuen 
 
 Getestet (Windows 11, PS 5.1): Erkennung (Status/Sprache), Senden, Heartbeat, Test-Button,
 Installer durchgeklickt, Beenden sendet `offline`, Update-Hinweis (1.0.0 → 1.2.0 erkannt).
-**Nicht getestet:** UAC-Pfade (Hosts, Altdienst-Entfernung), `Uninstall.ps1`.
+`Uninstall.ps1` vom User über „Installierte Apps“ getestet, alles entfernt.
+**Nicht getestet:** UAC-Pfade (Hosts, Altdienst-Entfernung).
 
 Offen Windows: `windows/README.md` neu schreiben; Haupt-README Abschnitt Windows anpassen.
 
