@@ -1,141 +1,140 @@
-# Teams Status Monitor for Home Assistant
+# Teams Busy Light for Windows
 
 > [!NOTE]
-> This solution only works for the new version of Microsoft Teams. You may want to consider [Get-MonitorStatus](https://github.com/EBOOZ/Get-MonitorStatus) in combination with this script as well.
+> This solution only works for the new version of Microsoft Teams. You may want to consider [Get-MonitorStatus](https://github.com/EBOOZ/Get-MonitorStatus) in combination with this app as well.
+
+A small app in the notification area of the taskbar that sends the status of the new
+Microsoft Teams client to the **Teams Busy Light** integration in Home Assistant. It is the
+Windows counterpart of the [macOS app](../macos/README.md) and uses the same integration,
+sensors and blueprint.
 
 ## Introduction
 
-We're working a lot at our home office these days. Several people already found solutions to make working in the home office more comfortable. One of these ways is to automate activities in your home automatation system based on your status on Microsoft Teams.
+We're working a lot at our home office these days. Several people already found solutions to make working in the home office more comfortable. One of these ways is to automate activities in your home automation system based on your status on Microsoft Teams.
 
 Microsoft provides the status of your account that is used in Teams via the Graph API. To access the Graph API, your organization needs to grant consent for the organization so everybody can read their Teams status. Since my organization didn't want to grant consent, I needed to find a workaround, which I found in monitoring the Teams client logfile for certain changes.
 
-The script sends the status to the **Teams Busy Light** custom integration
-(`custom_components/teams_status`) in Home Assistant via a webhook. The integration
-provides two sensors:
+## What is detected
 
-* `sensor.teams_status` – availability (`available`, `busy`, `in_a_call`, `in_a_meeting`, `presenting`, `focusing`, `do_not_disturb`, `be_right_back`, `away`, `offline`)
-* `sensor.teams_activity` – call activity (`not_in_call`, `in_call`, `incoming_call`, `outgoing_call`)
+| Sensor | Source on Windows |
+|--------|-------------------|
+| `status` (`available`, `busy`, `in_a_call`, `in_a_meeting`, `presenting`, `focusing`, `do_not_disturb`, `be_right_back`, `away`, `offline`) | The taskbar icon overlay that Teams writes to its logfile (`MSTeams_*.log`) |
+| `activity` (`not_in_call`, `in_call`, `incoming_call`, `outgoing_call`) | The call events in the same logfile, including ringing |
+| `offline` | Teams is not running, or the PC is off / asleep (integration timeout) |
 
 The states are language-neutral; Home Assistant shows them translated (German/English).
 
-Every user/computer adds its own integration entry and gets its own webhook and sensors.
-
 ### Language of the Teams app
 
-The new Teams client writes the status into its logfile in the language of the app.
-`Languages.ps1` contains the patterns per language (currently German and English).
-With `$TeamsLanguage = "auto"` (default, `Settings.ps1`) the language is detected
-from the log line itself; set `"de"` or `"en"` to force one.
-
-### Offline detection
-
-The script sends a keep-alive every `$HeartbeatSeconds` (60 s). If Home Assistant
-receives nothing within the timeout of the integration (180 s, see integration
-options), Teams is set to `offline` – e.g. when the computer is shut down.
+On Windows, Teams writes the status in the language of the app. `Languages.ps1` contains
+the patterns per language (currently German and English). By default the language is
+detected automatically; it can be set in the settings.
 
 ## Requirements
 
-* Windows client with the new Microsoft Teams installed
-* Home Assistant reachable from the client
-* `nssm.exe`, `Get-TeamsStatus.ps1`, `Languages.ps1`, `Messages.ps1`, `Translations`, `Settings.ps1`, `Install.cmd`, `Install.ps1`, and `Uninstall.ps1` in the same folder
+* Windows 10 or 11 with the new Microsoft Teams
+* Home Assistant reachable from the PC
+* The **Teams Busy Light** integration installed in Home Assistant
 
-## Home Assistant integration
+## Setup in Home Assistant
 
-1. Copy `custom_components/teams_status` to `<config>/custom_components/teams_status`
-2. Restart Home Assistant
-3. Settings → Devices & Services → Add Integration → **Teams Busy Light**
-4. Enter a user suffix, e.g. `Anna`; the entry becomes `Teams Anna`
-5. Copy the webhook URL shown after setup (also visible later under *Configure*)
+Add the integration once per Windows user: Settings → Devices & Services → Add Integration →
+**Teams Busy Light**. Enter a name, e.g. `Anna` → `sensor.teams_anna_status` /
+`sensor.teams_anna_activity`, and copy the webhook URL shown after setup (also available
+later under **Configure**).
 
-Create a separate integration entry for each Windows user. This gives each person their
-own webhook and sensors, e.g. `sensor.teams_anna_status` and
-`sensor.teams_anna_activity`.
+## Installation
 
-No long-lived access token is needed anymore.
-
-## Installation (recommended)
-
-Double-click `Install.cmd` in the script folder. It asks for administrator rights and
-opens the installer window without a PowerShell console.
-
-Alternatively, run `Install.ps1` in PowerShell:
+No administrator rights are needed. Download `TeamsBusyLight-Windows.zip` from the
+[latest release](https://github.com/SebastianInTheWild/HA-Teams-busy-light/releases/latest),
+unzip it and double-click `Install.cmd`. Alternatively, run in PowerShell, in that folder:
 
 ```powershell
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
 .\Install.ps1
 ```
 
-The installer opens in German or English based on the Windows display language. Add a
-matching `Translations/<language>.psd1` file to add another UI language.
+The installer shows the settings (see below); paste the webhook URL and click **Send test**,
+then **Install**. It
 
-The installer supports multiple Windows users. Use the Windows profile folder name
-(usually the signed-in account name). For **each** Windows profile:
+* copies the app to `%LOCALAPPDATA%\Programs\TeamsBusyLight` (settings and log in
+  `%LOCALAPPDATA%\TeamsBusyLight`),
+* adds it to the Start menu, to "Installed apps" and to the Windows sign-in,
+* starts it.
 
-1. Add a separate **Teams Busy Light** integration entry in Home Assistant.
-2. Copy its webhook URL (`https://.../api/webhook/...`).
-3. Add a row in the installer with the Windows profile folder name and that webhook URL.
+Every Windows user installs Teams Busy Light for themselves, with their own integration
+entry and webhook URL.
 
-The current signed-in Windows user is pre-filled in the first row. Use **Add user** for
-additional profiles. Each user sends status to their own Home Assistant sensors.
-The installed service monitors all listed profiles independently.
+To update, run `Install.cmd` of the new release; the settings are kept.
 
-What `Install.ps1` does:
+### Hosts file entry (optional)
 
-* Automatically elevates to Administrator if required
-* Pre-fills the signed-in username (with fallbacks)
-* Writes values into `C:\Scripts\TeamsStatus\Settings.ps1`
-* Resolves the Home Assistant DNS name from the webhook URL using DNS servers from active LAN/Wi-Fi adapters
-* Adds or updates the resolved mapping in the Windows hosts file (`%windir%\System32\drivers\etc\hosts`)
-* Copies script files and language resources to `C:\Scripts\TeamsStatus`
-* Installs (or, when already installed, restarts) the `Microsoft Teams Status Monitor` service via NSSM
-* Marks the Home Assistant hosts-file entries so the uninstaller can identify them
+If Home Assistant cannot be reached by its name, e.g. while a company VPN is connected,
+tick **Add Home Assistant to the Windows hosts file**. The installer then resolves the
+name via the DNS servers of the active LAN/Wi-Fi adapters and adds it to the hosts file
+(one UAC prompt). The entry is marked so the uninstaller can remove it.
 
-## Uninstallation
+### Update from the Windows service (1.2.0 and older)
 
-Run `Uninstall.ps1` as Administrator from the downloaded `windows` folder. The script
-asks for confirmation, stops and removes the `Microsoft Teams Status Monitor` service,
-and removes `C:\Scripts\TeamsStatus` (including the saved webhook settings). It removes
-hosts-file entries marked as belonging to Teams Busy Light. Older unmarked entries are
-only removed after a separate prompt; Home Assistant integration entries are never
-removed.
+Earlier versions ran as the Windows service `Microsoft Teams Status Monitor` from
+`C:\Scripts\TeamsStatus`. The installer takes over the webhook URL of the signed-in user
+and removes the service and the folder (one UAC prompt). Other Windows users of the PC then
+have to install Teams Busy Light for themselves.
 
-The uninstaller refuses to remove a service whose executable path does not point to
-this installation's NSSM executable.
+### Tray icon
 
-## Busy light blueprint
+The Teams Busy Light icon with a colored dot (same as on macOS):
 
-`blueprints/automation/teams_status/teams_busy_light.yaml` switches lights according
-to the Teams status – only the lights have to be selected. Colors, brightness and
-the sensors can be changed in the collapsed sections.
+| Dot | Meaning |
+|-----|---------|
+| green | Available |
+| red | Busy, in a meeting, presenting, focusing, do not disturb, or in a call |
+| yellow | Away, be right back |
+| gray | Offline (Teams not running) |
+| none | Status unknown |
+
+The icon may be hidden behind the arrow in the notification area; drag it onto the
+taskbar to keep it visible. Its menu shows the status, the call state and when the status
+was last sent to Home Assistant.
+
+### Settings
+
+Open **Settings…** in the menu of the tray icon or **Teams Busy Light** in the Start menu:
+
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| Home Assistant webhook URL | – | Webhook URL of the integration entry; **Send test** sends the current status |
+| Keep-alive every (seconds) | 60 | Must be shorter than the offline timeout of the integration (default 180 s) |
+| Check Teams every (seconds) | 2 | Check interval |
+| Language of the Teams app | Detect automatically | German or English, if the detection fails |
+| Start when I sign in to Windows | on | Start the app at sign-in |
+| Check for updates daily | on | Shows a menu entry and a notification when a new release is available; the update itself is downloaded from the release page |
 
 ## Verification
 
-After installation:
-
-* Start Microsoft Teams
-* Check if `sensor.teams_status` and `sensor.teams_activity` update in Home Assistant
-* Set a status manually: `.\Get-TeamsStatus.ps1 -SetStatus busy`
-* Verify service status:
-
-```powershell
-Get-Service -Name "Microsoft Teams Status Monitor"
-```
+* The menu of the tray icon shows the detected status, the call state and when the status
+  was last sent.
+* Log with every change (**Open log** in the menu): `%LOCALAPPDATA%\TeamsBusyLight\TeamsBusyLight.log`
+* Send a status manually to test the connection:
+  ```powershell
+  & "$env:LOCALAPPDATA\Programs\TeamsBusyLight\TeamsBusyLight.ps1" -SetStatus busy
+  ```
 
 ## Troubleshooting
 
-* If hosts update fails, confirm the UAC elevation prompt was accepted
-* If DNS resolution fails, verify network adapter DNS settings and HA DNS record
-* If the status is not recognized, look at the `SetTaskbarIconOverlay` / `SetBadge` lines in the Teams log and add the wording to `Languages.ps1`
-* If username auto-detection picks the wrong user on shared systems, rerun `Install.ps1` and edit the username in the installer window
+* **Menu shows "Home Assistant: not reachable":** check the webhook URL with **Send test**
+  in the settings. If the name of Home Assistant cannot be resolved (e.g. with a VPN), run
+  the installer again and tick the hosts file entry.
+* **Status stays unknown:** look at the `SetTaskbarIconOverlay` / `SetBadge` lines in the
+  newest `MSTeams_*.log` (`%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\Logs`).
+  If your Teams language is not supported, add the wording to `Languages.ps1` or
+  [open an issue](https://github.com/SebastianInTheWild/HA-Teams-busy-light/issues/new/choose)
+  with the line (remove personal data).
+* **The hosts file entry was not added:** confirm the UAC prompt; run the installer again.
 
-### Mehrere Windows-Benutzer
+## Uninstall
 
-Für jedes Windows-Profil wird ein eigener **Teams Busy Light**-Integrationseintrag in Home
-Assistant benötigt. Trage den jeweiligen Windows-Profilordnernamen und dessen eigene
-Webhook-URL in einer eigenen Zeile ein. Der angemeldete Benutzer wird in der ersten Zeile
-vorausgefüllt; weitere Profile kannst du mit **Benutzer hinzufügen** ergänzen. Der
-Windows-Dienst überwacht alle aufgeführten Profile getrennt und sendet jeden Status an
-die zugehörigen eigenen Sensoren.
-
-Die Installationsoberfläche wählt Deutsch oder Englisch anhand der Windows-Anzeigesprache.
-Weitere Sprachen können durch eine Datei `Translations/<sprachcode>.psd1` ergänzt werden.
+Remove **Teams Busy Light** under Settings → Apps → Installed apps, or run `Uninstall.ps1`
+from the downloaded folder. It stops and removes the app, its Start menu entry, the sign-in
+entry, the settings and the log. It asks whether to remove the hosts file entries as well
+(UAC prompt). The Home Assistant integration entry is not changed.

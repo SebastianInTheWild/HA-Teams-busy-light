@@ -8,7 +8,7 @@
 Show your **Microsoft Teams status in Home Assistant** and turn any light into a
 busy light – without Graph API, app registration or admin consent.
 
-A small script on your Windows PC or Mac reads the status of the new Teams client and
+A small app on your Windows PC or Mac reads the status of the new Teams client and
 sends it to the **Teams Busy Light** integration in Home Assistant via a webhook.
 
 | | |
@@ -16,7 +16,7 @@ sends it to the **Teams Busy Light** integration in Home Assistant via a webhook
 | **Status** | Available, Busy, In a call, In a meeting, Presenting, Focusing, Do not disturb, Be right back, Away, Offline |
 | **Activity** | Not in a call, In a call, Incoming call, Outgoing call |
 | **Languages** | Windows: Teams app in German or English (detected automatically); macOS: any Teams language. Home Assistant UI in German or English |
-| **Platform** | Windows (runs as a service) or macOS (menu bar app), each with the new Microsoft Teams |
+| **Platform** | Windows (tray app) or macOS (menu bar app), each with the new Microsoft Teams; no administrator rights needed |
 
 ## Quick start
 
@@ -54,25 +54,19 @@ Lost the URL? Open the integration and click **Configure**:
 
 [![Open your Home Assistant instance and show an integration.](https://my.home-assistant.io/badges/integration.svg)](https://my.home-assistant.io/redirect/integration/?domain=teams_status)
 
-### 3. Install the script on your computer
+### 3. Install the app on your computer
 
 #### Windows
 
-Download the [`windows`](windows) folder and double-click `Install.cmd`, or run in PowerShell:
+Download `TeamsBusyLight-Windows.zip` from the [latest release](https://github.com/SebastianInTheWild/HA-Teams-busy-light/releases/latest),
+unzip it and double-click `Install.cmd`.
 
-```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
-.\Install.ps1
-```
-
-The installer opens in German or English and supports multiple Windows users. Add one
-separate Home Assistant integration and webhook URL for each Windows profile. The
-`Microsoft Teams Status Monitor` service sends each profile to its own sensors.
+No administrator rights are needed. The installer asks for the webhook URL, then Teams
+Busy Light runs in the notification area of the taskbar and starts at sign-in. Every
+Windows user installs it for themselves with their own integration entry. The Windows
+service of earlier versions is replaced. Remove it later under Settings → Apps →
+Installed apps.
 Details: [windows/README.md](windows/README.md)
-
-To remove the Windows service and its installed files later, run `Uninstall.ps1` from
-the downloaded `windows` folder as Administrator. This does not remove the Home
-Assistant integration entries.
 
 #### macOS
 
@@ -139,7 +133,7 @@ If a computer stops reporting (shut down, asleep), the integration sets the stat
 ## How it works
 
 ```
-Teams log / call state ──► script (Windows service / macOS menu bar app)
+Teams log / call state ──► app (Windows tray / macOS menu bar)
                               │  POST {"status": "busy", "activity": "in_call", ...}
                               ▼
                Home Assistant webhook ──► sensor.teams_status / sensor.teams_activity
@@ -148,7 +142,7 @@ Teams log / call state ──► script (Windows service / macOS menu bar app)
                                        Busy light automation (blueprint)
 ```
 
-On Windows, the script reads the status from the Teams log (`SetTaskbarIconOverlay` / `SetBadge`)
+On Windows, the app reads the status from the Teams log (`SetTaskbarIconOverlay` / `SetBadge`)
 in the language of the Teams app and the call state from call events in the same log.
 On macOS, Teams logs the status with language-neutral English values; a running call is
 detected by the power assertion Teams holds during the call.

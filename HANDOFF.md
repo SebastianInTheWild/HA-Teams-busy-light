@@ -40,7 +40,7 @@ Installer durchgeklickt, Beenden sendet `offline`, Update-Hinweis (1.0.0 → 1.2
 `Uninstall.ps1` vom User über „Installierte Apps“ getestet, alles entfernt.
 **Nicht getestet:** UAC-Pfade (Hosts, Altdienst-Entfernung).
 
-Offen Windows: `windows/README.md` neu schreiben; Haupt-README Abschnitt Windows anpassen.
+Windows-Doku (`windows/README.md`, Haupt-README, CHANGELOG) am 13.11.2026 aktualisiert.
 
 ## Stand macOS (`macos/`) – gebaut und lokal teilweise getestet (12.11.2026)
 
@@ -79,7 +79,6 @@ Offen:
 - `uninstall.sh` testen.
 - Echtes Zertifikat erzeugen und Secrets setzen (User).
 - CI-Jobs laufen erst nach dem Push.
-- Windows: `windows/README.md` und Windows-Abschnitt im Haupt-README.
 
 ## Nächstes Feature: Musik am Rechner während Anrufen pausieren (Wunsch des Users)
 
