@@ -216,6 +216,9 @@ final class TeamsMonitor {
     private(set) var sendError: String?
     /// True while "send only in these networks" is set and the Mac is in none of them
     private(set) var awayFromHome = false
+    /// Sending paused from the menu until this time (`distantFuture` = until resumed)
+    private(set) var pausedUntil = SendPause.load()
+    var sendingPaused: Bool { (pausedUntil ?? .distantPast) > Date() }
     var logAccessDenied: Bool { logReader.accessDenied }
 
     /// Called on the main queue whenever something shown in the menu changes
@@ -259,7 +262,30 @@ final class TeamsMonitor {
 
     /// True when the webhook is set and the Mac is in an allowed network
     var maySend: Bool {
-        settings.isConfigured && HomeNetwork.isHome(settings.homeNetworks)
+        settings.isConfigured && !sendingPaused && HomeNetwork.isHome(settings.homeNetworks)
+    }
+
+    /// Stops sending until the given time; Home Assistant gets `offline` once
+    func pauseSending(until: Date) {
+        let tellHomeAssistant = maySend
+        pausedUntil = until
+        SendPause.save(until)
+        Log.write(until == .distantFuture ? "Sending paused" : "Sending paused until \(until)")
+        if tellHomeAssistant {
+            Webhook.send(url: settings.webhookURL, status: "offline", inCall: false) { _ in }
+        }
+        sendError = nil
+        onChange?()
+    }
+
+    func resumeSending() {
+        pausedUntil = nil
+        SendPause.save(nil)
+        Log.write("Sending resumed")
+        sentStatus = nil
+        retryAfter = .distantPast
+        onChange?()
+        sendIfNeeded()
     }
 
     /// Stops checking and tells Home Assistant (e.g. before sleep)
@@ -311,6 +337,10 @@ final class TeamsMonitor {
             changed = true
         }
 
+        if pausedUntil != nil && !sendingPaused {
+            resumeSending()
+        }
+
         let away = !HomeNetwork.isHome(settings.homeNetworks)
         if away != awayFromHome {
             awayFromHome = away
@@ -337,7 +367,7 @@ final class TeamsMonitor {
     }
 
     private func sendIfNeeded() {
-        guard settings.isConfigured, !awayFromHome, !sending, Date() >= retryAfter else { return }
+        guard settings.isConfigured, !awayFromHome, !sendingPaused, !sending, Date() >= retryAfter else { return }
         let due = Date().timeIntervalSince(lastSent ?? .distantPast) >= TimeInterval(settings.heartbeatSeconds)
         guard status != sentStatus || inCall != sentInCall || due else { return }
 
@@ -347,7 +377,7 @@ final class TeamsMonitor {
         Webhook.send(url: settings.webhookURL, status: sendStatus, inCall: sendInCall) { [weak self] reason in
             guard let self else { return }
             self.sending = false
-            if self.awayFromHome {
+            if self.awayFromHome || self.sendingPaused {
                 return
             }
             if let reason {

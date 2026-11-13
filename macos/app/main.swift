@@ -27,6 +27,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private let connectionLine = NSMenuItem()
     private let accessItem = NSMenuItem(title: L.menuNoLogAccess, action: #selector(showAccessHint), keyEquivalent: "")
     private let updateItem = NSMenuItem(title: "", action: #selector(openReleasePage), keyEquivalent: "")
+    private let pauseItem = NSMenuItem(title: L.menuPause, action: nil, keyEquivalent: "")
+    private let resumeItem = NSMenuItem(title: L.menuResume, action: #selector(resumeSending), keyEquivalent: "")
+    private let pauseTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        formatter.doesRelativeDateFormatting = true
+        return formatter
+    }()
     private let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.timeStyle = .medium
@@ -127,6 +136,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         accessItem.target = self
         menu.addItem(accessItem)
         menu.addItem(.separator())
+        let pauseMenu = NSMenu()
+        for (title, seconds) in [(L.pauseHour, 3600.0), (L.pause8Hours, 8 * 3600.0), (L.pauseDay, 24 * 3600.0), (L.pauseAlways, 0)] {
+            let item = NSMenuItem(title: title, action: #selector(pauseSending(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = Int(seconds)
+            pauseMenu.addItem(item)
+        }
+        pauseItem.submenu = pauseMenu
+        menu.addItem(pauseItem)
+        resumeItem.target = self
+        menu.addItem(resumeItem)
+        menu.addItem(.separator())
         updateItem.target = self
         menu.addItem(updateItem)
         menu.addItem(withTitle: L.menuSettings, action: #selector(showSettings), keyEquivalent: ",").target = self
@@ -144,6 +165,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         connectionLine.toolTip = nil
         if !settings.isConfigured {
             connectionLine.title = L.menuNotConfigured
+        } else if monitor.sendingPaused, let until = monitor.pausedUntil {
+            connectionLine.title = until == .distantFuture
+                ? L.menuPausedAlways : L.menuPausedUntil(pauseTimeFormatter.string(from: until))
         } else if monitor.awayFromHome {
             connectionLine.title = L.menuAway
         } else if let error = monitor.sendError {
@@ -155,6 +179,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             connectionLine.title = L.menuConnecting
         }
         accessItem.isHidden = !monitor.logAccessDenied
+        resumeItem.isHidden = !monitor.sendingPaused
         if monitor.logAccessDenied {
             if !accessWasDenied {
                 accessWasDenied = true
@@ -235,7 +260,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 currentStatus: { [weak self] in (self?.monitor.status, self?.monitor.inCall ?? false) },
                 onSave: { [weak self] settings, autostart in self?.apply(settings, autostart: autostart) },
                 onClose: { [weak self] in self?.settingsWindow?.close() },
-                onGrantAccess: { [weak self] in self?.openAccessSettings() }
+                onGrantAccess: { [weak self] in self?.openAccessSettings() },
+                version: updateChecker.currentVersion
             )
             let controller = NSHostingController(rootView: view)
             controller.sizingOptions = .preferredContentSize
@@ -274,6 +300,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
         refresh()
         settingsWindow?.close()
+    }
+
+    /// Tag = seconds, 0 = until resumed
+    @objc private func pauseSending(_ sender: NSMenuItem) {
+        monitor.pauseSending(until: sender.tag == 0 ? .distantFuture : Date().addingTimeInterval(TimeInterval(sender.tag)))
+    }
+
+    @objc private func resumeSending() {
+        monitor.resumeSending()
     }
 
     private var askingNetwork = false

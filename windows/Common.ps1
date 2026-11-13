@@ -14,6 +14,7 @@ $ProgramDir = Join-Path $env:LOCALAPPDATA 'Programs\TeamsBusyLight'
 $DataDir = Join-Path $env:LOCALAPPDATA 'TeamsBusyLight'
 $SettingsPath = Join-Path $DataDir 'settings.json'
 $LogPath = Join-Path $DataDir 'TeamsBusyLight.log'
+$PausePath = Join-Path $DataDir 'pause.txt'
 $LauncherPath = Join-Path $ProgramDir 'TeamsBusyLight.exe'
 $TeamsLogFolder = Join-Path $env:LOCALAPPDATA 'Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\Logs'
 $RunKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
@@ -279,6 +280,37 @@ function Save-TeamsSettings {
     }
     $Json = $Settings | ConvertTo-Json
     [System.IO.File]::WriteAllText($SettingsPath, $Json, $Utf8NoBom)
+}
+
+# Sending paused from the tray menu, kept over restarts: the end as UTC
+# timestamp, [datetime]::MaxValue = until resumed, $null = not paused
+function Get-TeamsPause {
+    if (-not (Test-Path $PausePath)) {
+        return $null
+    }
+    $Text = ([System.IO.File]::ReadAllText($PausePath)).Trim()
+    if ($Text -eq 'always') {
+        return [datetime]::MaxValue
+    }
+    $Until = [datetime]::MinValue
+    if ([datetime]::TryParse($Text, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$Until)) {
+        return $Until.ToLocalTime()
+    }
+    return $null
+}
+
+function Set-TeamsPause {
+    param([Nullable[datetime]]$Until)
+
+    if ($null -eq $Until) {
+        Remove-Item -LiteralPath $PausePath -ErrorAction SilentlyContinue
+        return
+    }
+    if (-not (Test-Path $DataDir)) {
+        New-Item -Path $DataDir -ItemType Directory -Force | Out-Null
+    }
+    $Text = if ($Until -eq [datetime]::MaxValue) { 'always' } else { $Until.ToUniversalTime().ToString('o') }
+    [System.IO.File]::WriteAllText($PausePath, $Text, $Utf8NoBom)
 }
 
 # Installed version (version.txt, written by the installer), "0.0.0" if unknown
@@ -548,7 +580,8 @@ function Show-TeamsSettingsDialog {
         [pscustomobject]$Settings,
         [bool]$Autostart = $true,
         [switch]$Install,
-        [bool]$LegacyFound = $false
+        [bool]$LegacyFound = $false,
+        [string]$Version = (Get-TeamsVersion)
     )
 
     $Width = 660
@@ -798,6 +831,15 @@ function Show-TeamsSettingsDialog {
     $CancelButton.BackColor = [System.Drawing.Color]::White
     $CancelButton.ForeColor = [System.Drawing.Color]::FromArgb(55, 65, 80)
     $Form.Controls.Add($CancelButton)
+
+    if ($Version -and $Version -ne '0.0.0') {
+        $VersionLabel = New-Object System.Windows.Forms.Label
+        $VersionLabel.Location = New-Object System.Drawing.Point($Margin, ($Y + 9))
+        $VersionLabel.Size = New-Object System.Drawing.Size(200, 20)
+        $VersionLabel.Text = $Messages.Version -f $Version
+        $VersionLabel.ForeColor = $HintColor
+        $Form.Controls.Add($VersionLabel)
+    }
 
     $Form.ClientSize = New-Object System.Drawing.Size($Width, ($OkButton.Bottom + $Margin))
     $Form.AcceptButton = $OkButton

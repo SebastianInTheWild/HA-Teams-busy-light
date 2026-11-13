@@ -93,6 +93,10 @@ Open **Settings…** in the menu (or double-click the app in `~/Applications`):
 | Start at login | on | Start the app after login |
 | Check for updates daily | on | Shows a menu entry and a notification when a new release is available; the update itself is downloaded from the release page |
 
+**Pause Sending** in the menu stops sending for 1 hour, 8 hours, 1 day or until **Resume
+Sending**; Home Assistant gets `offline` once. The pause is kept when the app restarts. The
+settings window shows the installed version.
+
 The app sends `offline` when it is quit and before the Mac goes to sleep (only inside the networks above). Outside the networks Home Assistant sets Teams offline after the offline timeout of the integration.
 
 ## Verification

@@ -69,6 +69,24 @@ struct AppSettings: Equatable {
     }
 }
 
+/// Sending paused from the menu, kept over restarts. `distantFuture` means
+/// until resumed.
+enum SendPause {
+    private static let key = "pausedUntil"
+
+    static func load() -> Date? {
+        UserDefaults.standard.object(forKey: key) as? Date
+    }
+
+    static func save(_ until: Date?) {
+        if let until {
+            UserDefaults.standard.set(until, forKey: key)
+        } else {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+    }
+}
+
 /// Starts the app at login with a LaunchAgent. The app is started through
 /// LaunchServices ("open"), so macOS treats it like an app started from the
 /// Finder (permissions belong to the app, not to launchd).

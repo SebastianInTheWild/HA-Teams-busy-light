@@ -126,7 +126,20 @@ Testplan Windows (Ergebnisse hier eintragen):
    dauerhaft; keine zweite MessageBox, solange eine offen ist.
 7. Außerhalb beenden → kein `offline` an HA (HA-Logbuch/Sensor bleibt bis Timeout).
 8. Leeres Feld → Verhalten wie vorher.
-9. Danach weiter mit dem Windows-Testplan unten.
+9. **Senden pausieren** (Tray-Menü, Untermenü 1 Stunde / 8 Stunden / 1 Tag / Bis ich
+   fortsetze; auf macOS ebenso, dort ebenfalls noch nicht durchgeklickt):
+   - Pause → HA bekommt sofort `offline`, Menü „Home Assistant: pausiert bis …“ bzw.
+     „pausiert“, Tooltip „… - pausiert“, „Senden fortsetzen“ sichtbar, danach nichts gesendet.
+   - `%LOCALAPPDATA%\TeamsBusyLight\pause.txt` (UTC-Zeitstempel oder `always`); App beenden
+     (kein `offline`, da pausiert) und neu starten → Pause bleibt.
+   - „Senden fortsetzen“ → sofort gesendet, `pause.txt` weg. Abgelaufene Pause (zum Test
+     Zeitstempel in `pause.txt` in die nahe Zukunft setzen und neu starten) endet von selbst.
+10. **Version im Einstellungsfenster** unten links („Version 1.2.0“), auch im Installer
+    (aus `version.txt` bzw. `manifest.json`); bei `0.0.0` wird nichts angezeigt.
+11. Danach weiter mit dem Windows-Testplan unten.
+
+Offene Frage des Users: In-App-Updater (bisher bewusst nur Hinweis). Einschätzung siehe Chat
+vom 13.11.2026 – Entscheidung steht aus.
 
 ## Nächster Schritt: Windows-Tests (auf dem Windows-PC)
 

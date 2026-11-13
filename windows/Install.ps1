@@ -64,7 +64,15 @@ if (-not $Current.WebhookUrl -and $LegacyFound) {
 }
 $Autostart = if ($IsUpdate) { Get-TeamsAutostart } else { $true }
 
-$Result = Show-TeamsSettingsDialog -Settings $Current -Autostart $Autostart -Install -LegacyFound $LegacyFound
+# Version for the update hint: version.txt of the release download, or the
+# integration's manifest in a checkout of the repository
+$Version = Get-TeamsVersion
+$Manifest = Join-Path $PSScriptRoot '..\custom_components\teams_status\manifest.json'
+if ($Version -eq '0.0.0' -and (Test-Path $Manifest)) {
+    $Version = ([System.IO.File]::ReadAllText($Manifest) | ConvertFrom-Json).version
+}
+
+$Result = Show-TeamsSettingsDialog -Settings $Current -Autostart $Autostart -Install -LegacyFound $LegacyFound -Version $Version
 if (-not $Result) {
     exit
 }
@@ -80,13 +88,6 @@ foreach ($File in 'TeamsBusyLight.ps1', 'Common.ps1', 'Languages.ps1', 'AdminTas
 }
 Copy-Item -Path (Join-Path $PSScriptRoot 'Translations\*.json') -Destination (Join-Path $ProgramDir 'Translations')
 
-# Version for the update hint: version.txt of the release download, or the
-# integration's manifest in a checkout of the repository
-$Version = Get-TeamsVersion
-$Manifest = Join-Path $PSScriptRoot '..\custom_components\teams_status\manifest.json'
-if ($Version -eq '0.0.0' -and (Test-Path $Manifest)) {
-    $Version = ([System.IO.File]::ReadAllText($Manifest) | ConvertFrom-Json).version
-}
 Set-Content -Path (Join-Path $ProgramDir 'version.txt') -Value $Version -Encoding ASCII
 
 # Build the starter with the C# compiler of the .NET Framework

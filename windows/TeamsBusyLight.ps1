@@ -91,6 +91,7 @@ $State = @{
     Away = $false
     LastNetworkCheck = [datetime]::MinValue
     AskingNetwork = $false
+    PausedUntil = Get-TeamsPause
 }
 $AppVersion = Get-TeamsVersion
 
@@ -161,10 +162,25 @@ $SettingsItem.Font = New-Object System.Drawing.Font($SettingsItem.Font, [System.
 $LogItem = New-Object System.Windows.Forms.ToolStripMenuItem($Messages.MenuOpenLog)
 $UpdateItem = New-Object System.Windows.Forms.ToolStripMenuItem
 $UpdateItem.Visible = $false
+$PauseItem = New-Object System.Windows.Forms.ToolStripMenuItem($Messages.MenuPause)
+foreach ($Choice in @(@($Messages.Pause1h, 1), @($Messages.Pause8h, 8), @($Messages.Pause1d, 24), @($Messages.PauseAlways, 0))) {
+    $Item = New-Object System.Windows.Forms.ToolStripMenuItem($Choice[0])
+    $Item.Tag = $Choice[1]
+    $Item.Add_Click({
+        param($EventSender)
+        $Hours = [int]$EventSender.Tag
+        Suspend-TeamsSending $(if ($Hours -eq 0) { [datetime]::MaxValue } else { (Get-Date).AddHours($Hours) })
+    })
+    [void]$PauseItem.DropDownItems.Add($Item)
+}
+$ResumeItem = New-Object System.Windows.Forms.ToolStripMenuItem($Messages.MenuResume)
 $ExitItem = New-Object System.Windows.Forms.ToolStripMenuItem($Messages.MenuExit)
 [void]$Menu.Items.Add($StatusItem)
 [void]$Menu.Items.Add($ActivityItem)
 [void]$Menu.Items.Add($ConnectionItem)
+[void]$Menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
+[void]$Menu.Items.Add($PauseItem)
+[void]$Menu.Items.Add($ResumeItem)
 [void]$Menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
 [void]$Menu.Items.Add($SettingsItem)
 [void]$Menu.Items.Add($LogItem)
@@ -183,6 +199,17 @@ function Update-TrayDisplay {
     if (-not $Config.WebhookUrl) {
         $ConnectionItem.Text = $Messages.MenuNotConfigured
     }
+    elseif ($State.PausedUntil) {
+        $ConnectionItem.Text = if ($State.PausedUntil -eq [datetime]::MaxValue) {
+            $Messages.MenuPausedAlways
+        }
+        elseif ($State.PausedUntil.Date -eq (Get-Date).Date) {
+            $Messages.MenuPausedUntil -f $State.PausedUntil.ToString('t')
+        }
+        else {
+            $Messages.MenuPausedUntil -f $State.PausedUntil.ToString('g')
+        }
+    }
     elseif ($State.Away) {
         $ConnectionItem.Text = $Messages.MenuAway
     }
@@ -196,6 +223,8 @@ function Update-TrayDisplay {
         $ConnectionItem.Text = $Messages.MenuSentAt -f '-'
     }
 
+    $ResumeItem.Visible = [bool]$State.PausedUntil
+
     $ColorKey = if ($State.Status -and $StatusColorKey.ContainsKey($State.Status)) { $StatusColorKey[$State.Status] } else { 'none' }
     if ($State.Activity -ne 'not_in_call') {
         $ColorKey = 'busy'
@@ -206,7 +235,10 @@ function Update-TrayDisplay {
     if ($State.Activity -ne 'not_in_call') {
         $Tooltip += " ($ActivityName)"
     }
-    if (-not $Config.WebhookUrl -or $State.SendError) {
+    if ($State.PausedUntil) {
+        $Tooltip += " - " + $Messages.TooltipPaused
+    }
+    elseif (-not $Config.WebhookUrl -or $State.SendError) {
         $Tooltip += " - HA " + $Messages.TooltipError
     }
     # The tooltip of a NotifyIcon is limited to 63 characters
@@ -288,7 +320,7 @@ function Complete-TeamsSend {
     }
     $State.SendTask = $null
     $SendError = Get-TeamsSendError $Task
-    if ($State.Away) {
+    if ($State.Away -or $State.PausedUntil) {
         return
     }
     if ($SendError) {
@@ -342,6 +374,36 @@ function Update-TeamsState {
         Write-TeamsLog ($Messages.LogStatus -f $State.Status, $State.Activity)
         Update-TrayDisplay
     }
+}
+
+# Pauses sending from the tray menu; Home Assistant gets "offline" once
+function Suspend-TeamsSending {
+    param([datetime]$Until)
+
+    $TellHomeAssistant = $Config.WebhookUrl -and -not $State.Away -and -not $State.PausedUntil
+    $State.PausedUntil = $Until
+    Set-TeamsPause $Until
+    if ($Until -eq [datetime]::MaxValue) {
+        Write-TeamsLog $Messages.LogPausedAlways
+    }
+    else {
+        Write-TeamsLog ($Messages.LogPaused -f $Until.ToString('g'))
+    }
+    if ($TellHomeAssistant) {
+        # Not awaited; the result is not needed
+        [void](Start-TeamsStatusSend -Client $Http -WebhookUrl $Config.WebhookUrl -Status 'offline' -Activity 'not_in_call')
+    }
+    $State.SendError = $null
+    Update-TrayDisplay
+}
+
+function Resume-TeamsSending {
+    $State.PausedUntil = $null
+    Set-TeamsPause $null
+    Write-TeamsLog $Messages.LogResumed
+    $State.SentStatus = $null
+    $State.RetryAfter = [datetime]::MinValue
+    Update-TrayDisplay
 }
 
 # Pauses sending outside the networks set under "Send only in these networks";
@@ -411,7 +473,7 @@ function Request-TeamsNewNetwork {
 }
 
 function Invoke-TeamsSend {
-    if (-not $Config.WebhookUrl -or $State.Away -or $State.SendTask -or -not $State.Status) {
+    if (-not $Config.WebhookUrl -or $State.Away -or $State.PausedUntil -or $State.SendTask -or -not $State.Status) {
         return
     }
     $Now = Get-Date
@@ -427,7 +489,7 @@ function Invoke-TeamsSend {
 function Exit-TeamsBusyLight {
     $Timer.Stop()
     # Tell Home Assistant right away instead of waiting for the timeout
-    if ($Config.WebhookUrl -and (Test-TeamsHomeNetwork $Config.HomeNetworks)) {
+    if ($Config.WebhookUrl -and -not $State.PausedUntil -and (Test-TeamsHomeNetwork $Config.HomeNetworks)) {
         [void](Send-TeamsStatus -WebhookUrl $Config.WebhookUrl -Status 'offline' -Activity 'not_in_call' -TimeoutSeconds 3)
     }
     $Tray.Visible = $false
@@ -447,6 +509,9 @@ $Timer.Add_Tick({
             Open-TeamsSettings
         }
         Complete-TeamsSend
+        if ($State.PausedUntil -and $State.PausedUntil -ne [datetime]::MaxValue -and (Get-Date) -ge $State.PausedUntil) {
+            Resume-TeamsSending
+        }
         if (((Get-Date) - $State.LastPoll).TotalSeconds -ge $Config.PollSeconds) {
             $State.LastPoll = Get-Date
             Update-TeamsState
@@ -468,6 +533,7 @@ $LogItem.Add_Click({
     }
 })
 $ExitItem.Add_Click({ Exit-TeamsBusyLight })
+$ResumeItem.Add_Click({ Resume-TeamsSending })
 $UpdateItem.Add_Click({ Start-Process $ReleasesPage })
 $Tray.Add_BalloonTipClicked({ if ($State.UpdateVersion) { Start-Process $ReleasesPage } })
 $Tray.Add_DoubleClick({ Open-TeamsSettings })

@@ -37,6 +37,16 @@ enum L {
     static let menuSendFailed = t("Home Assistant: not reachable", "Home Assistant: nicht erreichbar")
     static let menuNotConfigured = t("Home Assistant: webhook URL missing", "Home Assistant: Webhook-URL fehlt")
     static let menuAway = t("Home Assistant: paused (not in a home network)", "Home Assistant: pausiert (nicht im Heimnetz)")
+    static let menuPausedAlways = t("Home Assistant: paused", "Home Assistant: pausiert")
+    static func menuPausedUntil(_ time: String) -> String {
+        t("Home Assistant: paused until \(time)", "Home Assistant: pausiert bis \(time)")
+    }
+    static let menuPause = t("Pause Sending", "Senden pausieren")
+    static let pauseHour = t("For 1 Hour", "1 Stunde")
+    static let pause8Hours = t("For 8 Hours", "8 Stunden")
+    static let pauseDay = t("For 1 Day", "1 Tag")
+    static let pauseAlways = t("Until Resumed", "Bis ich fortsetze")
+    static let menuResume = t("Resume Sending", "Senden fortsetzen")
     static let menuConnecting = t("Home Assistant: connecting…", "Home Assistant: wird verbunden …")
     static let menuNoLogAccess = t("No access to the Teams logs", "Kein Zugriff auf die Teams-Logs")
     static let menuSettings = t("Settings…", "Einstellungen …")
@@ -52,6 +62,7 @@ enum L {
     static let checkForUpdates = t("Check for updates daily", "Täglich nach Updates suchen")
 
     // Settings
+    static func version(_ version: String) -> String { "Version \(version)" }
     static let settingsTitle = t("Teams Busy Light Settings", "Teams Busy Light – Einstellungen")
     static let webhook = t("Webhook URL", "Webhook-URL")
     static let webhookHint = t(

@@ -39,6 +39,7 @@ struct SettingsView: View {
     let onSave: (AppSettings, Bool) -> Void
     let onClose: () -> Void
     let onGrantAccess: () -> Void
+    let version: String
 
     private var trimmedURL: String {
         model.webhookURL.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -120,6 +121,8 @@ struct SettingsView: View {
                     Text(error)
                         .foregroundStyle(.red)
                         .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text(L.version(version)).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button(L.cancel, action: onClose)

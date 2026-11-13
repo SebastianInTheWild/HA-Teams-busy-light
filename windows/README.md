@@ -113,6 +113,10 @@ Open **Settings…** in the menu of the tray icon or **Teams Busy Light** in the
 | Start when I sign in to Windows | on | Start the app at sign-in |
 | Check for updates daily | on | Shows a menu entry and a notification when a new release is available; the update itself is downloaded from the release page |
 
+**Pause sending** in the menu of the tray icon stops sending for 1 hour, 8 hours, 1 day or
+until **Resume sending**; Home Assistant gets `offline` once. The pause is kept when the app
+restarts. The settings window shows the installed version.
+
 ## Verification
 
 * The menu of the tray icon shows the detected status, the call state and when the status
