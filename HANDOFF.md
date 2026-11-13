@@ -175,30 +175,48 @@ Ziel: Der Updater installiert nur Dateien, die mit **unserem** Zertifikat signie
 vertrauen. Kein stilles Update: Update-Hinweis bekommt „Jetzt aktualisieren“, Installation
 erst nach Bestätigung.
 
-### Windows-Signatur
-1. `windows/create-signing-certificate.ps1`: `New-SelfSignedCertificate -Type CodeSigningCert
-   -Subject "CN=Teams Busy Light" -KeyAlgorithm RSA -KeyLength 3072 -HashAlgorithm SHA256
-   -NotAfter (+10 Jahre) -CertStoreLocation Cert:\CurrentUser\My`, Export als PFX mit Passwort
-   nach `teams-busy-light-signing/` (gitignored, wie beim Mac), dazu Base64 für das Secret und
-   den Fingerabdruck (SHA-256 des Zertifikats) ausgeben. Zertifikat danach aus dem Store
-   entfernen. Eigenes Zertifikat, nicht das Mac-Zertifikat.
-2. Secrets `WINDOWS_SIGNING_PFX` (Base64) und `WINDOWS_SIGNING_PASSWORD`, wie die macOS-Secrets
-   im **Environment `release` mit Pflicht-Freigabe durch den User** (schützt bei
-   Kontoübernahme nur zusammen mit 2FA; auch die macOS-Secrets dorthin verschieben).
-3. `release.yml`: Job auf `windows-latest` (Environment `release`): PFX laden,
-   `Set-AuthenticodeSignature -HashAlgorithm SHA256 -TimestampServer
-   http://timestamp.digicert.com` auf alle `windows/*.ps1`, dann ZIP bauen. Ohne Secret: ZIP
-   unsigniert (wie ad-hoc beim Mac), Updater lehnt es dann ab.
-4. Fingerabdruck als Konstante in `Common.ps1` (`$SigningThumbprint`); Repo-Builds ohne
-   Signatur bekommen keinen Update-Knopf, nur den Hinweis.
-5. Prüfen (unter Windows): `Get-AuthenticodeSignature` liefert bei nicht vertrauenswürdigem
-   Root `UnknownError`/`NotTrusted`, bei Manipulation `HashMismatch`. Akzeptieren nur, wenn
-   Status nicht `HashMismatch`/`NotSigned` **und** `SignerCertificate` = gepinnter
-   Fingerabdruck. Testen: Datei nach Signatur ändern → muss abgelehnt werden. Klären, ob das
-   ExecutionPolicy-/„Zulassen“-Verhalten sich durch die Signatur ändert (Launcher nutzt
-   Bypass?) und ob die Signaturblöcke Umlaute/Encoding der `.ps1` stören (alle ASCII).
-6. `TeamsBusyLight.exe` wird lokal kompiliert und bleibt unsigniert, wird aber aus den
-   geprüften Quellen gebaut.
+### Windows-Signatur – umgesetzt (13.11.2026), Zertifikat/Secrets offen
+
+Abweichend vom ersten Plan wird nicht jede `.ps1` signiert, sondern ein **Dateikatalog**
+`TeamsBusyLight.cat` (`New-FileCatalog`, SHA-256) über **alle** Dateien des Downloads – auch
+`Launcher.cs` (wird zur exe kompiliert), `Install.cmd`, Übersetzungen, `version.txt`.
+- `windows/tools/create-signing-certificate.ps1`: RSA 3072, 10 Jahre, PFX + Passwort + Base64
+  nach `%USERPROFILE%	eams-busy-light-signing-windows` (Ziel im Repo wird abgelehnt, ACL nur
+  für den Benutzer), gibt den SHA-256-Fingerabdruck aus, entfernt das Zertifikat aus dem Store.
+- `windows/tools/build-release.ps1 -Version x`: Stage `dist/TeamsBusyLight-Windows` (ohne
+  `tools`), `version.txt`, Katalog, Signatur mit DigiCert-Zeitstempel (3 Versuche, Pflicht),
+  prüft Fingerabdruck gegen `$SigningCertificateSha256` und den fertigen Ordner, dann ZIP.
+  Ohne Secret: unsigniert mit Warnung.
+- `Common.ps1`: `$SigningCertificateSha256` (noch leer), `Test-TeamsReleaseSignature`
+  (`SignedCms.CheckSignature($true)` statt Authenticode-Vertrauen, Pinning, `Test-FileCatalog`;
+  gibt `$null` oder den Grund zurück).
+- `release.yml`: neuer Job `windows` (windows-latest, PS 5.1) baut/signiert/lädt das ZIP hoch;
+  `assets` nur noch macOS. Beide mit `environment: release`.
+- `validate.yml`: Job „Build Windows download“ baut bei jedem Push mit den Secrets.
+- Lokal getestet (Wegwerf-Zertifikat): sauber → OK; ohne/anderer Pin, geänderte/zusätzliche
+  Datei, gekipptes Katalog-Byte, fehlender Katalog, neu signiert mit gleichnamigem fremdem
+  Zertifikat → abgelehnt. `Get-AuthenticodeSignature` = `UnknownError` (erwartet).
+
+- `Import-TeamsSecurityModule`: lädt `Microsoft.PowerShell.Security` aus `$PSHOME`; sonst
+  scheitert PS 5.1, wenn `PSModulePath` von PowerShell 7 geerbt ist (z. B. aus Git Bash oder
+  einem PS-7-Terminal gestartet: „AuditToString is already present“).
+
+Erledigt am 13.11.2026 (User-Entscheidung):
+- Echtes Zertifikat auf dem Windows-PC erzeugt: `%USERPROFILE%	eams-busy-light-signing-windows`
+  (ACL nur Sebastian), SHA-256 `C490C7763D8BB1C4098F00D45BB87C7BC45A41282686F89D32C941EBDBABF48F`
+  in `Common.ps1`. Lokaler Build damit signiert und gegen den Pin geprüft.
+- Environment `release`: Pflicht-Freigabe (Reviewer `sebastianschmalzbauer` – das `gh`-Konto;
+  `SebastianInTheWild` wurde von der API nicht übernommen), nur Tags `v*.*.*`.
+  Secrets `WINDOWS_SIGNING_PFX`/`_PASSWORD` dort gesetzt.
+- `validate.yml` ohne Signatur-Secrets (Windows unsigniert, macOS ad hoc); Release bricht ab,
+  wenn ein Signatur-Secret fehlt.
+
+- macOS-Secrets vom User ins Environment verschoben (12:43 UTC), Repo-Secrets gelöscht –
+  auf Repo-Ebene gibt es keine Secrets mehr.
+
+Offen (User): Backup der Windows-PFX
+an einem sicheren Ort (Passwortmanager); geht sie verloren, braucht es ein neues
+Zertifikat und alle Installationen müssen einmal von Hand aktualisiert werden.
 
 ### Updater Windows
 - Update-Hinweis (Menü + Balloon) → Frage „Version x installieren?“ → Asset

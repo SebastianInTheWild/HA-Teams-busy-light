@@ -26,6 +26,12 @@ $ShowSettingsEventName = 'Local\TeamsBusyLight.ShowSettings'
 $ExitEventName = 'Local\TeamsBusyLight.Exit'
 $ReleasesPage = 'https://github.com/SebastianInTheWild/HA-Teams-busy-light/releases/latest'
 $ReleasesApi = 'https://api.github.com/repos/SebastianInTheWild/HA-Teams-busy-light/releases/latest'
+# The Windows download contains a catalog with the hashes of all its files,
+# signed with our own certificate (windows/tools/create-signing-certificate.ps1).
+# Updates are installed only if the catalog is signed with the certificate
+# with this SHA-256 fingerprint. Empty = no update button, only the hint.
+$ReleaseCatalogName = 'TeamsBusyLight.cat'
+$SigningCertificateSha256 = 'C490C7763D8BB1C4098F00D45BB87C7BC45A41282686F89D32C941EBDBABF48F'
 
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
@@ -336,6 +342,65 @@ function Test-TeamsNewerVersion {
         if ($X -ne $Y) { return $X -gt $Y }
     }
     return $false
+}
+
+# Test-FileCatalog/New-FileCatalog: load the module of this PowerShell
+# explicitly. Started from PowerShell 7 (e.g. Install.cmd in a PowerShell 7
+# terminal), PSModulePath points to the PowerShell 7 module first, which
+# Windows PowerShell 5.1 cannot load.
+function Import-TeamsSecurityModule {
+    Import-Module -Name (Join-Path $PSHOME 'Modules\Microsoft.PowerShell.Security') -ErrorAction Stop
+}
+
+function Get-TeamsCertificateSha256 {
+    param([System.Security.Cryptography.X509Certificates.X509Certificate2]$Certificate)
+
+    $Hash = [System.Security.Cryptography.SHA256]::Create().ComputeHash($Certificate.RawData)
+    return [BitConverter]::ToString($Hash).Replace('-', '')
+}
+
+# Checks an unpacked Windows download: the catalog must be signed with the
+# pinned certificate and all files must match it (none changed, added or
+# missing). Windows does not need to trust the certificate, so the signature
+# is checked here instead of with Get-AuthenticodeSignature.
+# Returns $null if everything is fine, otherwise the reason.
+function Test-TeamsReleaseSignature {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [string]$Fingerprint = $SigningCertificateSha256
+    )
+
+    if (-not $Fingerprint) {
+        return 'no signing certificate pinned'
+    }
+    $CatalogPath = Join-Path $Path $ReleaseCatalogName
+    if (-not (Test-Path -LiteralPath $CatalogPath)) {
+        return 'not signed'
+    }
+    Add-Type -AssemblyName System.Security
+    $SignedData = New-Object System.Security.Cryptography.Pkcs.SignedCms
+    try {
+        $SignedData.Decode([System.IO.File]::ReadAllBytes($CatalogPath))
+        # Checks the signature itself, not whether Windows trusts the certificate
+        $SignedData.CheckSignature($true)
+    }
+    catch {
+        return "invalid signature ($($_.Exception.Message.Trim()))"
+    }
+    if ($SignedData.SignerInfos.Count -ne 1 -or -not $SignedData.SignerInfos[0].Certificate) {
+        return 'unexpected signers'
+    }
+    if ((Get-TeamsCertificateSha256 $SignedData.SignerInfos[0].Certificate) -ne $Fingerprint) {
+        return 'signed with another certificate'
+    }
+    Import-TeamsSecurityModule
+    $Result = Test-FileCatalog -CatalogFilePath $CatalogPath -Path $Path -Detailed
+    if ($Result.Status -ne 'Valid') {
+        $Differences = @($Result.CatalogItems.Keys | Where-Object { $Result.CatalogItems[$_] -ne $Result.PathItems[$_] }) +
+            @($Result.PathItems.Keys | Where-Object { -not $Result.CatalogItems.ContainsKey($_) })
+        return "files do not match the catalog: $($Differences -join ', ')"
+    }
+    return $null
 }
 
 function Get-TeamsAutostart {

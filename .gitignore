@@ -17,3 +17,9 @@ Thumbs.db
 teams-busy-light-signing/
 *.p12
 *.p12.base64
+*.pfx
+*.pfx.base64
+teams-busy-light-signing-windows/
+
+# Built downloads (windows/tools/build-release.ps1)
+dist/

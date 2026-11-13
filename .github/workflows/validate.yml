@@ -45,25 +45,29 @@ jobs:
           $results | Format-Table -AutoSize
           if ($results) { exit 1 }
 
+  windows-download:
+    name: Build Windows download
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build
+        # Unsigned: the signing secrets are only available to the release
+        # (environment "release" with approval); the release build checks
+        # the certificate against Common.ps1 before anything is uploaded
+        shell: powershell
+        run: ./windows/tools/build-release.ps1 -Version 0.0.0 -OutputPath dist
+
   macos-app:
     name: Build macOS app
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
       - name: Build
-        # Same signing as the release, so a broken certificate shows up before tagging
-        # (secrets are empty for pull requests from forks: then ad hoc)
-        env:
-          MACOS_SIGNING_P12: ${{ secrets.MACOS_SIGNING_P12 }}
-          MACOS_SIGNING_PASSWORD: ${{ secrets.MACOS_SIGNING_PASSWORD }}
+        # Signed ad hoc: the signing secrets are only available to the release
+        # (environment "release" with approval)
         run: bash macos/build.sh
       - name: Check
-        env:
-          SIGNED: ${{ secrets.MACOS_SIGNING_P12 != '' }}
         run: |
           app="macos/build/Teams Busy Light.app"
-          if [ "$SIGNED" = "true" ]; then
-            codesign -d -r- "$app" 2>&1 | grep -q 'certificate leaf'
-          fi
           lipo -archs "$app/Contents/MacOS/TeamsBusyLight"
           "$app/Contents/MacOS/TeamsBusyLight" --show
