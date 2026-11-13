@@ -12,3 +12,8 @@ Thumbs.db
 
 # Local test copies (e.g. a filled-in Settings.ps1 with a webhook URL)
 *.local.ps1
+
+# Code signing certificate and password (never commit)
+teams-busy-light-signing/
+*.p12
+*.p12.base64
