@@ -1,6 +1,11 @@
-# Übergabe: Tray-/Menüleisten-Apps (Branch `tray-apps`)
+# Übergabe: Netzfilter, Pause, Updater (Branch `network-pause`)
 
-Arbeitsnotiz für die Fortsetzung auf dem Mac. **Vor dem Merge nach `main` löschen.**
+Arbeitsnotiz. **Vor dem Merge nach `main` löschen.**
+
+`network-pause` = `main` (1.3.0) + die Netzfilter-/Pause-Commits aus `tray-apps`, neu
+aufgesetzt am 13.11.2026. **`origin/tray-apps` nicht mehr verwenden:** veraltet und enthält
+in 4bb7cb4 das Signaturzertifikat samt Passwort (öffentliches Repo) → Zertifikat ersetzen,
+Branch löschen (Entscheidung beim User).
 
 ## Ziel (mit dem User abgestimmt, 12.11.2026)
 
@@ -122,7 +127,7 @@ Testplan Windows (Ergebnisse hier eintragen):
    - Ja → Netz in der Liste, Senden läuft wieder (Menü „gesendet um …“).
    - Nein (nach Zurücksetzen) → keine erneute Frage, `IgnoredNetworks` in settings.json.
    - Abbrechen → `AskForNewNetworks: false`, Checkbox in den Einstellungen aus.
-6. MessageBox erscheint im Vordergrund (`DefaultDesktopOnly`) und blockiert den Tray nicht
+6. MessageBox erscheint im Vordergrund (TopMost-Owner) und blockiert den Tray nicht
    dauerhaft; keine zweite MessageBox, solange eine offen ist.
 7. Außerhalb beenden → kein `offline` an HA (HA-Logbuch/Sensor bleibt bis Timeout).
 8. Leeres Feld → Verhalten wie vorher.
@@ -134,9 +139,30 @@ Testplan Windows (Ergebnisse hier eintragen):
      (kein `offline`, da pausiert) und neu starten → Pause bleibt.
    - „Senden fortsetzen“ → sofort gesendet, `pause.txt` weg. Abgelaufene Pause (zum Test
      Zeitstempel in `pause.txt` in die nahe Zukunft setzen und neu starten) endet von selbst.
-10. **Version im Einstellungsfenster** unten links („Version 1.2.0“), auch im Installer
+10. **Version im Einstellungsfenster** unten links („Version 1.3.0“), auch im Installer
     (aus `version.txt` bzw. `manifest.json`); bei `0.0.0` wird nichts angezeigt.
-11. Danach weiter mit dem Windows-Testplan unten.
+
+Ergebnisse 13.11.2026 (Windows 11, PS 5.1):
+- 1 ✅ Feld, Button, Checkbox, „Version 1.3.0“ im Installer; Registry `DisplayVersion` 1.3.0.
+  Skalierung 125/150 % nicht geprüft.
+- 2 ✅ `192.168.11.0/24`; `vEthernet (Default Switch)` hat kein Gateway → gefiltert.
+- 3 ✅ Warnung, Fenster bleibt offen (Logik zusätzlich per Skript: `foo`, `10.1/16`,
+  `1.2.3.4/33`, `/24`, `1.2.3.4/-1` abgelehnt).
+- 4 ✅ Senden normal, Sensor aktuell.
+- 5 ✅ nach Fix: **MessageBox mit `DefaultDesktopOnly` kam in der Tray-App nach 8 ms mit
+  „Nein“ zurück, ohne angezeigt zu werden** (isoliert, auch im Timer und mit Launcher-Start,
+  nicht reproduzierbar). Ohne die Option erschien sie, rutschte aber später hinter andere
+  Fenster. Jetzt: unsichtbares TopMost-Owner-Fenster → Box TopMost und im Vordergrund.
+  Ja/Nein/Abbrechen danach je ✅ (Liste, `IgnoredNetworks` ohne erneute Frage,
+  `AskForNewNetworks: false`).
+- 6 ✅ Tray/Timer läuft weiter, während die Box offen ist (Status wurde weiter geloggt).
+- 7 ✅ außerhalb beendet → HA blieb `available`.
+- 8 ✅ leeres Feld → Senden wie vorher.
+- 9 ✅ 1 Stunde (sofort `offline`, `pause.txt` UTC), übersteht Neustart, läuft von selbst ab
+  (`Sending resumed`, `available`), „Bis ich fortsetze“ + „Senden fortsetzen“.
+- 10 ✅ (siehe 1).
+- Offen: macOS-Pause noch nicht durchgeklickt; prüfen, ob `NSAlert` dort ähnlich betroffen ist
+  (eher nicht).
 
 ## Danach: Windows-Signatur (Variante 1) und In-App-Updater (entschieden 13.11.2026)
 
@@ -195,32 +221,10 @@ erst nach Bestätigung.
 ### Doku
 README (beide), CHANGELOG, Hinweis zum Environment `release` und zur Freigabe beim Release.
 
-## Nächster Schritt: Windows-Tests (auf dem Windows-PC)
+## Windows-Grundtests (UAC, Update vom Dienst, Deinstallation) – erledigt
 
-macOS ist fertig und vom User getestet. Auf Windows noch ungetestet: UAC-Pfade,
-Update vom alten Dienst, Deinstallation mit Hosts-Eintrag und Altdienst. Testplan (Ergebnisse hier eintragen):
-
-1. **Altinstallation vorbereiten:** Ordner `windows` von Tag `v1.2.0`
-   (`git worktree add ../tbl-1.2.0 v1.2.0`) mit dessen `Install.cmd` installieren → Dienst
-   `Microsoft Teams Status Monitor` läuft, `C:\Scripts\TeamsStatus\Settings.ps1` enthält
-   die URL.
-2. **Update vom Dienst:** `windows\Install.cmd` aus `tray-apps` (ohne Admin starten).
-   Erwartet: URL vorausgefüllt, Hinweis auf Entfernen des Dienstes, eine UAC-Abfrage,
-   danach Dienst und `C:\Scripts\TeamsStatus` weg, Tray-App läuft, Sensor in HA aktuell.
-3. **Hosts-Eintrag:** Installer erneut, Haken „Hosts-Datei“ setzen → UAC → Zeile mit
-   `# Teams Busy Light` in `%windir%\System32\drivers\etc\hosts`.
-4. **UAC ablehnen:** Installer mit Hosts-Haken, UAC mit „Nein“ → Warnung
-   „nicht ausgeführt: Hosts-Eintrag“, Installation trotzdem vollständig.
-5. **Deinstallation über „Installierte Apps“** (Grundfall am 12.11. getestet, alles
-   entfernt; offen nur der Hosts-Teil): Abfrage, Hosts-Frage (Ja → UAC → Zeile
-   weg), danach weg: Autostart (`HKCU\...\Run`), Startmenü, Eintrag in „Installierte
-   Apps“, `%LOCALAPPDATA%\Programs\TeamsBusyLight`, `%LOCALAPPDATA%\TeamsBusyLight`;
-   HA bekommt `offline`.
-6. **Deinstallation mit `Uninstall.ps1`** aus dem Download-Ordner (gleiche Prüfungen),
-   dabei einmal mit noch vorhandenem Altdienst (Frage nach dessen Entfernung).
-7. **Release-Layout:** Ordner `windows` + `version.txt` (z. B. `1.2.0`) kopieren und
-   daraus installieren → Update-Hinweis nur bei neuerer Version.
-8. Optional Windows 10 (README nennt 10 oder 11, getestet nur 11).
+Am 13.11.2026 auf `main` durchgeführt, alle ✅ (Details im Commit 3df82e5), danach Release 1.3.0.
+Windows 10 entfällt (ohne Support).
 
 ## Später: Musik am Rechner während Anrufen pausieren (Wunsch des Users, zurückgestellt am 13.11.2026)
 

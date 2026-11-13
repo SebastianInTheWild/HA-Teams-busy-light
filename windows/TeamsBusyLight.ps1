@@ -441,14 +441,25 @@ function Request-TeamsNewNetwork {
         return
     }
     $State.AskingNetwork = $true
+    # Invisible topmost owner, so the question comes to the front even while
+    # another app is active. (MessageBoxOptions.DefaultDesktopOnly must not be
+    # used: in the tray app it returned "No" at once without showing the box.)
+    $Owner = New-Object System.Windows.Forms.Form
+    $Owner.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
+    $Owner.ShowInTaskbar = $false
+    $Owner.StartPosition = [System.Windows.Forms.FormStartPosition]::Manual
+    $Owner.Location = New-Object System.Drawing.Point(-32000, -32000)
+    $Owner.Size = New-Object System.Drawing.Size(1, 1)
+    $Owner.TopMost = $true
     try {
+        $Owner.Show()
+        $Owner.Activate()
         $Answer = [System.Windows.Forms.MessageBox]::Show(
+            $Owner,
             ($Messages.NewNetworkText -f $Network),
             $Messages.AppName,
             [System.Windows.Forms.MessageBoxButtons]::YesNoCancel,
-            [System.Windows.Forms.MessageBoxIcon]::Question,
-            [System.Windows.Forms.MessageBoxDefaultButton]::Button1,
-            [System.Windows.Forms.MessageBoxOptions]::DefaultDesktopOnly
+            [System.Windows.Forms.MessageBoxIcon]::Question
         )
         switch ($Answer) {
             'Yes' {
@@ -468,6 +479,7 @@ function Request-TeamsNewNetwork {
         $State.LastNetworkCheck = [datetime]::MinValue
     }
     finally {
+        $Owner.Dispose()
         $State.AskingNetwork = $false
     }
 }
