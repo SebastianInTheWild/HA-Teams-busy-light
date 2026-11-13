@@ -103,9 +103,32 @@ Update vom alten Dienst, Deinstallation mit Hosts-Eintrag und Altdienst. Testpla
    HA bekommt `offline`.
 6. **Deinstallation mit `Uninstall.ps1`** aus dem Download-Ordner (gleiche Prüfungen),
    dabei einmal mit noch vorhandenem Altdienst (Frage nach dessen Entfernung).
+
+Ergebnisse 13.11.2026 (Windows 11, Anzeigesprache en-GB → englische Texte):
+- 1 ✅ (v1.2.0 per Worktree `../tbl-1.2.0` installiert, legt auch die Hosts-Zeile an).
+- 2 ✅ nach Fix: URL wurde **nicht** übernommen – Regex in `Get-LegacyWebhookUrl` nutzte
+  `\3`, in .NET werden aber unbenannte Gruppen vor benannten nummeriert → nie ein Treffer
+  beim Format ab v1.1. Jetzt benannte Gruppen. Dann: URL vorausgefüllt, Banner, eine UAC,
+  Dienst + Ordner weg, Sensor aktuell. Zusätzlich: Installer schreibt jetzt `DisplayVersion`.
+- 3 ✅ nach Fix: **`Set-Content` hat die Hosts-Datei geleert** („Stream was not readable“,
+  danach 0 Byte, Handle im Admin-Prozess offen). Ursache für den Schreibfehler nicht
+  geklärt (mit normaler Datei nicht reproduzierbar). `AdminTasks.ps1` schreibt jetzt über
+  `Update-HostsFile`: einmal exklusiv öffnen (Retry ~10 s), im selben Stream lesen/schreiben,
+  bei Fehler Original zurückschreiben. Hosts-Datei des PCs wiederhergestellt. Danach
+  „Hosts-Eintrag hinzugefügt“, Kommentare erhalten.
+- 4 ✅ Warnung „nicht ausgeführt: Hosts-Eintrag“, Installation vollständig, Hosts unverändert.
+- 5 ✅ alles entfernt inkl. Hosts-Zeile, HA `offline`.
+- 6 ✅ Tray-App + Altdienst parallel, `Uninstall.ps1` aus dem Repo: Fragen
+  Deinstallieren/Hosts/Altdienst, eine UAC, alles entfernt (auch Temp-Kopie).
+- 7 ✅ Kopie im Release-Layout: `version.txt` 1.1.2 → „Installierte Apps“ 1.1.2,
+  Update-Hinweis (Benachrichtigung + Menü); 1.2.0 → kein Hinweis.
+- 8 entfällt: Windows 10 ist ohne Support, README nennt nur Windows 11 (10 ungetestet). Deutsche GUI-Texte laut User ok.
+- Deutsche Texte nicht in der GUI gesehen (Anzeigesprache Englisch); `de.json` hat alle 70
+  Schlüssel von `en.json`.
+
 7. **Release-Layout:** Ordner `windows` + `version.txt` (z. B. `1.2.0`) kopieren und
    daraus installieren → Update-Hinweis nur bei neuerer Version.
-8. Optional Windows 10 (README nennt 10 oder 11, getestet nur 11).
+8. ~~Optional Windows 10~~ – entfällt (User, 13.11.2026).
 
 ## Später: Musik am Rechner während Anrufen pausieren (Wunsch des Users, zurückgestellt am 13.11.2026)
 

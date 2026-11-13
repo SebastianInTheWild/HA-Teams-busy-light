@@ -32,7 +32,8 @@ detected automatically; it can be set in the settings.
 
 ## Requirements
 
-* Windows 10 or 11 with the new Microsoft Teams
+* Windows 11 with the new Microsoft Teams (Windows 10 is no longer supported by Microsoft
+  and is not tested; the app will probably work there)
 * Home Assistant reachable from the PC
 * The **Teams Busy Light** integration installed in Home Assistant
 

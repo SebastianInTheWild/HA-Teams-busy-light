@@ -82,6 +82,65 @@ function Test-HostsLine {
     return $false
 }
 
+# Rewrites the hosts file with the lines returned by $Transform. The file is
+# opened once and exclusively, so it is never left truncated: if it is in use,
+# nothing changes; if writing fails, the original content is written back.
+# (Set-Content truncates first and left an empty hosts file when it failed.)
+# Returns $true if the content changed.
+function Update-HostsFile {
+    param([scriptblock]$Transform)
+
+    $Encoding = [System.Text.Encoding]::Default
+    $Stream = $null
+    for ($Try = 1; -not $Stream; $Try++) {
+        try {
+            $Stream = [System.IO.File]::Open($HostsPath, 'OpenOrCreate', 'ReadWrite', 'None')
+        }
+        catch [System.IO.IOException] {
+            if ($Try -ge 20) {
+                throw
+            }
+            Start-Sleep -Milliseconds 500
+        }
+    }
+    try {
+        $Original = New-Object byte[] $Stream.Length
+        $Read = 0
+        while ($Read -lt $Original.Length) {
+            $Count = $Stream.Read($Original, $Read, $Original.Length - $Read)
+            if ($Count -le 0) {
+                break
+            }
+            $Read += $Count
+        }
+        $Text = $Encoding.GetString($Original)
+        $Lines = @($Text -split '\r?\n')
+        if ($Lines.Count -gt 0 -and $Lines[-1] -eq '') {
+            $Lines = @($Lines | Select-Object -SkipLast 1)
+        }
+        $NewText = ((@(& $Transform $Lines) -join "`r`n") + "`r`n")
+        if ($NewText -eq $Text) {
+            return $false
+        }
+        $Bytes = $Encoding.GetBytes($NewText)
+        try {
+            $Stream.SetLength(0)
+            $Stream.Write($Bytes, 0, $Bytes.Length)
+            $Stream.Flush()
+        }
+        catch {
+            $Stream.SetLength(0)
+            $Stream.Write($Original, 0, $Original.Length)
+            $Stream.Flush()
+            throw
+        }
+        return $true
+    }
+    finally {
+        $Stream.Dispose()
+    }
+}
+
 foreach ($HostName in $AddHost) {
     try {
         $Address = Resolve-LanHost $HostName
@@ -90,26 +149,26 @@ foreach ($HostName in $AddHost) {
             $Failed = $true
             continue
         }
-        $Lines = @(Get-Content -Path $HostsPath -ErrorAction Stop)
         $DesiredLine = "$Address`t$HostName`t$HostsTag"
         $Names = @($HostName.ToLowerInvariant())
-        $Updated = New-Object System.Collections.Generic.List[string]
-        $Replaced = $false
-        foreach ($Line in $Lines) {
-            if (Test-HostsLine $Line $Names) {
-                if (-not $Replaced) {
-                    $Updated.Add($DesiredLine)
-                    $Replaced = $true
+        $State = @{ Replaced = $false }
+        [void](Update-HostsFile {
+            param($Lines)
+            foreach ($Line in $Lines) {
+                if (Test-HostsLine $Line $Names) {
+                    if (-not $State.Replaced) {
+                        $DesiredLine
+                        $State.Replaced = $true
+                    }
+                    continue
                 }
-                continue
+                $Line
             }
-            $Updated.Add($Line)
-        }
-        if (-not $Replaced) {
-            $Updated.Add($DesiredLine)
-        }
-        Set-Content -Path $HostsPath -Value $Updated -Encoding Default -ErrorAction Stop
-        $Message = if ($Replaced) { $Messages.HostsUpdated } else { $Messages.HostsAdded }
+            if (-not $State.Replaced) {
+                $DesiredLine
+            }
+        })
+        $Message = if ($State.Replaced) { $Messages.HostsUpdated } else { $Messages.HostsAdded }
         $Report.Add(($Message -f $Address, $HostName))
     }
     catch {
@@ -121,10 +180,11 @@ foreach ($HostName in $AddHost) {
 if ($RemoveHost.Count -gt 0) {
     try {
         $Names = @($RemoveHost | ForEach-Object { $_.ToLowerInvariant() })
-        $Lines = @(Get-Content -Path $HostsPath -ErrorAction Stop)
-        $Remaining = @($Lines | Where-Object { -not ($_.TrimEnd().EndsWith($HostsTag) -and (Test-HostsLine $_ $Names)) })
-        if ($Remaining.Count -ne $Lines.Count) {
-            Set-Content -Path $HostsPath -Value $Remaining -Encoding Default -ErrorAction Stop
+        $Changed = Update-HostsFile {
+            param($Lines)
+            $Lines | Where-Object { -not ($_.TrimEnd().EndsWith($HostsTag) -and (Test-HostsLine $_ $Names)) }
+        }
+        if ($Changed) {
             $Report.Add($Messages.HostsRemoved)
         }
     }

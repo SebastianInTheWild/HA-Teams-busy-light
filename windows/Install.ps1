@@ -43,7 +43,7 @@ function Get-LegacyWebhookUrl {
         return ''
     }
     $Text = Get-Content -Path $LegacySettings -Raw -ErrorAction SilentlyContinue
-    $Entries = [regex]::Matches($Text, "Username\s*=\s*(['""])(?<user>.*?)\1\s+HAWebhookUrl\s*=\s*(['""])(?<url>.*?)\3")
+    $Entries = [regex]::Matches($Text, "Username\s*=\s*(?<q1>['""])(?<user>.*?)\k<q1>\s+HAWebhookUrl\s*=\s*(?<q2>['""])(?<url>.*?)\k<q2>")
     foreach ($Entry in $Entries) {
         if ($Entry.Groups['user'].Value -ieq $env:USERNAME) {
             return $Entry.Groups['url'].Value
@@ -118,6 +118,7 @@ New-Item -Path $UninstallKey -Force | Out-Null
 $UninstallCommand = '"{0}" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{1}"' -f `
     (Join-Path $env:windir 'System32\WindowsPowerShell\v1.0\powershell.exe'), (Join-Path $ProgramDir 'Uninstall.ps1')
 Set-ItemProperty -Path $UninstallKey -Name DisplayName -Value $AppName
+Set-ItemProperty -Path $UninstallKey -Name DisplayVersion -Value $Version
 Set-ItemProperty -Path $UninstallKey -Name DisplayIcon -Value (Join-Path $ProgramDir 'icon.ico')
 Set-ItemProperty -Path $UninstallKey -Name Publisher -Value 'SebastianInTheWild'
 Set-ItemProperty -Path $UninstallKey -Name URLInfoAbout -Value 'https://github.com/SebastianInTheWild/HA-Teams-busy-light'
