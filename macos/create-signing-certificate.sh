@@ -11,7 +11,8 @@
 set -euo pipefail
 
 NAME="Teams Busy Light"
-OUT="${1:-$PWD/teams-busy-light-signing}"
+# Outside the repository, so the private key is not committed by accident
+OUT="${1:-$HOME/teams-busy-light-signing}"
 mkdir -p "$OUT"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
