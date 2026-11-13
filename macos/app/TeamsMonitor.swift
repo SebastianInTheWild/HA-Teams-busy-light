@@ -310,7 +310,7 @@ final class TeamsMonitor {
     }
 
     private func sendIfNeeded() {
-        guard settings.isConfigured, !sending, status != nil, Date() >= retryAfter else { return }
+        guard settings.isConfigured, !sending, Date() >= retryAfter else { return }
         let due = Date().timeIntervalSince(lastSent ?? .distantPast) >= TimeInterval(settings.heartbeatSeconds)
         guard status != sentStatus || inCall != sentInCall || due else { return }
 

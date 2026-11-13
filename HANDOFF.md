@@ -42,60 +42,55 @@ Installer durchgeklickt, Beenden sendet `offline`, Update-Hinweis (1.0.0 → 1.2
 
 Offen Windows: `windows/README.md` neu schreiben; Haupt-README Abschnitt Windows anpassen.
 
-## Stand macOS (`macos/app/*.swift`) – teilweise geschrieben, NIE kompiliert
+## Stand macOS (`macos/`) – gebaut und lokal teilweise getestet (12.11.2026)
 
-Fertig geschrieben (ungeprüft!): `Strings.swift` (de/en), `Settings.swift` (UserDefaults
-`com.teamsbusylight.app`, Keys `webhookURL`, `heartbeatSeconds`, `pollSeconds`,
-`checkForUpdates`; `LoginItem` = LaunchAgent `com.teamsbusylight.agent` mit
-`open -g -a <App>`, ohne KeepAlive; `Log` → `~/Library/Logs/TeamsBusyLight.log`),
-`TeamsMonitor.swift` (inkrementelles Lesen der Teams-Logs, Mapping wie bisher im Bash-Skript,
-Anruf über `IOPMCopyAssertionsByProcess` / „Microsoft Teams Call in progress“, Senden per
-URLSession, Pause/Resume für Ruhezustand, `describe()` für `--show`),
-`UpdateChecker.swift`.
+Erledigt: `app/main.swift` (AppDelegate, Statusleiste, Edit-Hauptmenü, Sleep/Wake, SIGTERM →
+sauberes Beenden mit `offline`, `--show`, `--set-status`, Update-Benachrichtigung über
+UserNotifications), `app/SettingsView.swift` (SwiftUI-Form; `ObservableObject` statt `@State`,
+weil `@State` im macOS-27-SDK ein Makro ist und die Command Line Tools das SwiftUI-Makro-Plugin
+nicht mitliefern), `build.sh` (Universal, Icon, Signatur per `MACOS_SIGNING_P12`/`_PASSWORD`
+über temporäre Keychain, sonst `SIGNING_IDENTITY` oder ad-hoc), `install.sh`/`uninstall.sh`
+neu, `create-signing-certificate.sh` (3DES-PKCS#12, damit `security import` es liest),
+CI-Jobs (`validate.yml` „Build macOS app“, `release.yml` „assets“ mit beiden ZIPs),
+`macos/README.md`, macOS-Teile im Haupt-README, CHANGELOG. `teams-busy-light.sh` und
+`settings.sh` gelöscht.
 
-Noch zu schreiben:
-1. `main.swift` / `AppDelegate`: `NSApplication` mit `.accessory`; `--show` vor dem App-Start
-   ausgeben und beenden. **Hauptmenü mit Edit-Menü** (Ausschneiden/Kopieren/Einsetzen/Alles
-   auswählen) setzen, sonst funktioniert ⌘V im Textfeld einer LSUIElement-App nicht.
-   `LoginItem.enableOnFirstStart()`. Ohne URL → Einstellungen öffnen.
-   `applicationShouldHandleReopen` → Einstellungen öffnen (Doppelklick auf die App).
-   `NSWorkspace.willSleep/didWake` → `monitor.pause()/resume()`.
-   Beenden: `applicationShouldTerminate` → `offline` senden (max. 3 s).
-2. Statusleiste: `NSStatusItem` mit SF Symbols in Farbe (`paletteColors`):
-   available `checkmark.circle.fill` grün; busy/in_a_call/in_a_meeting/presenting/focusing
-   `circle.fill` rot; do_not_disturb `minus.circle.fill` rot; away/be_right_back
-   `clock.fill` gelb; im Anruf `phone.circle.fill` rot; offline/unbekannt `circle` (Template);
-   Sendefehler/keine URL/kein Log-Zugriff `exclamationmark.circle` orange.
-   Menü: Status, Anruf, HA-Verbindung (deaktiviert), ggf. „Kein Zugriff auf die Teams-Logs“,
-   ggf. Update-Eintrag, „Einstellungen …“ (⌘,), „Log anzeigen“, „Teams Busy Light beenden“ (⌘Q).
-3. `SettingsView.swift`: SwiftUI `Form` (`.formStyle(.grouped)`, macOS 13) in einem
-   `NSWindow`/`NSHostingView`; Felder wie oben; „Test senden“ sendet aktuellen Status an die
-   eingegebene URL; Sichern → `AppSettings.save()`, `LoginItem.setEnabled`, `monitor.update`,
-   `updateChecker.setEnabled`. Vor dem Anzeigen `NSApp.activate(ignoringOtherApps: true)`.
-4. `macos/build.sh`: `xcrun swiftc -O -swift-version 5 -target {arm64,x86_64}-apple-macos13.0`,
-   `lipo` zu Universal, Bundle `Teams Busy Light.app` (Executable `TeamsBusyLight`),
-   Info.plist (`CFBundleIdentifier com.teamsbusylight.app`, `LSUIElement`,
-   `LSMinimumSystemVersion 13.0`, `NSLocalNetworkUsageDescription`,
-   `CFBundleShortVersionString` aus `manifest.json`), `AppIcon.icns` aus `macos/icon.png`,
-   signieren: Identität aus Umgebungsvariable (CI) sonst `-` (ad-hoc).
-5. `macos/install.sh` neu: App neben dem Skript (Release-ZIP) oder per `build.sh` bauen;
-   alten LaunchAgent `bootout`, alte Prozesse beenden (`teams-busy-light.sh`, alte App);
-   `settings.sh` → `defaults write com.teamsbusylight.app …` migrieren; bei alter
-   AppleScript-App (`Contents/MacOS/applet`) `tccutil reset All com.teamsbusylight.app`;
-   alte Dateien unter `~/Library/Application Support/TeamsBusyLight` löschen; App nach
-   `~/Applications` kopieren (`ditto`), Quarantäne entfernen, `open`.
-   Check auf nicht schreibbares `~/Library/LaunchAgents` beibehalten.
-   `uninstall.sh`: zusätzlich `defaults delete com.teamsbusylight.app`.
-   Danach `macos/teams-busy-light.sh` und `macos/settings.sh` löschen.
-6. Signatur-Zertifikat: Skript zum Erzeugen (openssl, `extendedKeyUsage=codeSigning`, .p12),
-   Secrets `MACOS_SIGNING_P12` (base64) + `MACOS_SIGNING_PASSWORD`; in CI temporäre Keychain,
-   Import, `codesign --sign <SHA-1>`. Prüfen, dass `codesign -d -r-` eine stabile
-   Designated Requirement (Zertifikat statt cdhash) zeigt.
-7. CI: `validate.yml` + Job „Build macOS app“ (macos-latest, `build.sh`);
-   `release.yml` + Job, der `TeamsBusyLight-macOS.zip` (App + install.sh + uninstall.sh +
-   README) und `TeamsBusyLight-Windows.zip` (Ordner `windows` + `version.txt`) an das
-   Release hängt. PSScriptAnalyzer meldet nur Warnungen (CI prüft Severity Error).
-8. Doku: `macos/README.md`, Haupt-README, CHANGELOG „Unreleased“.
+Lokal getestet (macOS 27, nur CLT): Build (x86_64-Linkerwarnung zu
+`libswiftCompatibilityPacks.a` ist harmlos), `--show`, Start, LaunchAgent wird geschrieben und
+bei verschobener App umgeschrieben, SIGTERM sendet `offline`, `install.sh` mit Migration aus
+`settings.sh` und als Update, Senden an lokalen Test-Webhook, Signatur mit Testzertifikat →
+Designated Requirement `certificate leaf = H"…"` (stabil).
+
+Nach dem Test mit dem User (12./13.11.2026) ergänzt:
+- „Daten anderer Apps“ wird auf macOS 27 nicht abgefragt (`tccd`: „Denied (Service Policy)“,
+  auch fürs Terminal). Nötig ist Festplattenvollzugriff. Die App zeigt den Hinweis beim Start
+  selbst an, öffnet Einstellungen und Finder (App markiert, zum Hineinziehen), erkennt die
+  Freigabe ohne Neustart (Mitteilung „Zugriff erteilt“), und das Einstellungsfenster zeigt
+  den Zugriffsstatus mit „Freigeben …“.
+- Menüleisten-Icon wie unter Windows: Brand-Icon mit farbigem Punkt (gleiche RGB-Werte).
+  Das orange Fehler-Icon ist entfallen; Fehler stehen im Menü.
+- Fester Bedienungshilfen-Name „Teams Busy Light“ und `autosaveName`: Menüleisten-Manager
+  erkennen Icons am Namen; vorher wechselte er mit dem Status. Thaw zeigte das Icon trotzdem
+  nicht an (wohl Altlasten der früheren Namen), Hidden Bar zeigt es richtig an.
+- Freigabe bleibt über Neubauten erhalten, wenn mit demselben Zertifikat signiert wird
+  (lokal mit Testzertifikat geprüft).
+
+Offen:
+- `uninstall.sh` testen.
+- Echtes Zertifikat erzeugen und Secrets setzen (User).
+- CI-Jobs laufen erst nach dem Push.
+- Windows: `windows/README.md` und Windows-Abschnitt im Haupt-README.
+
+## Nächstes Feature: Musik am Rechner während Anrufen pausieren (Wunsch des Users)
+
+Läuft am Rechner Musik (Spotify, Apple Music, Browser …), wird sie bei einem Anruf pausiert
+und danach fortgesetzt, aber nur, wenn die App sie selbst pausiert hat. Schalter
+„Musik während Anrufen pausieren“ in den Einstellungen, beide Plattformen.
+- Windows: Auslöser schon beim Klingeln; Steuerung über
+  `GlobalSystemMediaTransportControlsSessionManager` (WinRT), keine Berechtigung nötig.
+- macOS: Auslöser erst bei Anrufbeginn (Klingeln nicht erkennbar). Keine offizielle
+  app-übergreifende API: entweder MediaRemote (privat, kann mit Updates brechen) oder
+  AppleScript pro App (Music, Spotify; Automation-Abfrage). Mit dem User entscheiden.
 
 ## Testen auf dem Mac
 

@@ -16,7 +16,7 @@ sends it to the **Teams Busy Light** integration in Home Assistant via a webhook
 | **Status** | Available, Busy, In a call, In a meeting, Presenting, Focusing, Do not disturb, Be right back, Away, Offline |
 | **Activity** | Not in a call, In a call, Incoming call, Outgoing call |
 | **Languages** | Windows: Teams app in German or English (detected automatically); macOS: any Teams language. Home Assistant UI in German or English |
-| **Platform** | Windows (runs as a service) or macOS (runs as a background app), each with the new Microsoft Teams |
+| **Platform** | Windows (runs as a service) or macOS (menu bar app), each with the new Microsoft Teams |
 
 ## Quick start
 
@@ -76,14 +76,17 @@ Assistant integration entries.
 
 #### macOS
 
-Download the [`macos`](macos) folder and run in Terminal, in that folder:
+Download `TeamsBusyLight-macOS.zip` from the [latest release](https://github.com/SebastianInTheWild/HA-Teams-busy-light/releases/latest),
+unzip it and run in Terminal, in that folder:
 
 ```shell
 bash install.sh
 ```
 
-No administrator rights are needed. When macOS asks whether "Teams Busy Light" may access
-data from other apps and find devices on your local network, click **Allow** both times.
+No administrator rights are needed. Teams Busy Light appears in the menu bar and asks
+for the webhook URL in its settings. It also guides you through granting **Full Disk
+Access** (needed to read the Teams logs); when macOS asks whether it may find devices on
+your local network, click **Allow**.
 Remove it later with `bash uninstall.sh`.
 Details: [macos/README.md](macos/README.md)
 
@@ -136,7 +139,7 @@ If a computer stops reporting (shut down, asleep), the integration sets the stat
 ## How it works
 
 ```
-Teams log / call state ──► script (Windows service / macOS app)
+Teams log / call state ──► script (Windows service / macOS menu bar app)
                               │  POST {"status": "busy", "activity": "in_call", ...}
                               ▼
                Home Assistant webhook ──► sensor.teams_status / sensor.teams_activity

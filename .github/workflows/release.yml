@@ -47,3 +47,37 @@ jobs:
           else
             gh release create "$GITHUB_REF_NAME" --title "$version" --notes-file notes.md --verify-tag
           fi
+
+  assets:
+    name: Attach Windows and macOS downloads
+    needs: release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build macOS app
+        env:
+          MACOS_SIGNING_P12: ${{ secrets.MACOS_SIGNING_P12 }}
+          MACOS_SIGNING_PASSWORD: ${{ secrets.MACOS_SIGNING_PASSWORD }}
+        run: |
+          if [ -z "$MACOS_SIGNING_P12" ]; then
+            echo "::warning::MACOS_SIGNING_P12 is not set; the app is signed ad hoc"
+          fi
+          bash macos/build.sh
+
+      - name: Create ZIP files
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist/TeamsBusyLight-macOS dist/TeamsBusyLight-Windows
+          ditto "macos/build/Teams Busy Light.app" "dist/TeamsBusyLight-macOS/Teams Busy Light.app"
+          cp macos/install.sh macos/uninstall.sh macos/README.md dist/TeamsBusyLight-macOS/
+          cp -R windows/. dist/TeamsBusyLight-Windows/
+          printf '%s' "$version" > dist/TeamsBusyLight-Windows/version.txt
+          cd dist
+          ditto -c -k --keepParent TeamsBusyLight-macOS TeamsBusyLight-macOS.zip
+          ditto -c -k --norsrc --keepParent TeamsBusyLight-Windows TeamsBusyLight-Windows.zip
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/TeamsBusyLight-macOS.zip dist/TeamsBusyLight-Windows.zip --clobber

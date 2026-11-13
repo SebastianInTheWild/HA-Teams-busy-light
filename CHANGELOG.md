@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+* macOS: native menu bar app instead of the script; shows the Teams status in the menu bar, settings window (webhook URL with test, intervals, start at login), sends `offline` when quitting or going to sleep. `install.sh` takes over the settings of the script version
+* macOS: the release contains the signed app (`TeamsBusyLight-macOS.zip`); granted permissions are kept after updates
+* macOS and Windows: optional daily check for a new release, shown in the menu (no automatic installation)
 * Blueprint: optionally play music or radio on a media player; stop during calls and while offline
 
 ## 1.2.0

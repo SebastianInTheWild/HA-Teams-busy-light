@@ -36,12 +36,17 @@ enum L {
     }
     static let menuSendFailed = t("Home Assistant: not reachable", "Home Assistant: nicht erreichbar")
     static let menuNotConfigured = t("Home Assistant: webhook URL missing", "Home Assistant: Webhook-URL fehlt")
+    static let menuConnecting = t("Home Assistant: connecting…", "Home Assistant: wird verbunden …")
     static let menuNoLogAccess = t("No access to the Teams logs", "Kein Zugriff auf die Teams-Logs")
     static let menuSettings = t("Settings…", "Einstellungen …")
     static let menuShowLog = t("Show Log", "Log anzeigen")
     static let menuQuit = t("Quit Teams Busy Light", "Teams Busy Light beenden")
     static func menuUpdate(_ version: String) -> String {
         t("Update \(version) available…", "Update \(version) verfügbar …")
+    }
+    static func updateNotification(_ version: String) -> String {
+        t("Teams Busy Light \(version) is available. Click to open the release page.",
+          "Teams Busy Light \(version) ist verfügbar. Klicke, um die Release-Seite zu öffnen.")
     }
     static let checkForUpdates = t("Check for updates daily", "Täglich nach Updates suchen")
 
@@ -78,8 +83,35 @@ enum L {
     static func autostartFailed(_ reason: String) -> String {
         t("Start at login could not be changed: \(reason)", "Start bei der Anmeldung konnte nicht geändert werden: \(reason)")
     }
+    static let openPrivacySettings = t("Open System Settings", "Systemeinstellungen öffnen")
+    static let ok = t("OK", "OK")
     static let noLogAccessHint = t(
-        "Teams Busy Light cannot read the Teams logs. Allow access to data from other apps, or add ~/Applications/Teams Busy Light.app under System Settings > Privacy & Security > Full Disk Access.",
-        "Teams Busy Light kann die Teams-Logs nicht lesen. Erlaube den Zugriff auf Daten anderer Apps oder füge ~/Applications/Teams Busy Light.app unter Systemeinstellungen > Datenschutz & Sicherheit > Festplattenvollzugriff hinzu."
+        """
+        Teams Busy Light needs Full Disk Access to read the status from the Teams logs.
+
+        1. Click "Open System Settings". Full Disk Access and a Finder window with Teams Busy Light open.
+        2. Drag Teams Busy Light from the Finder window into the list (or click + and choose it).
+        3. Turn it on. If macOS offers "Quit & Reopen", click "Later".
+
+        Teams Busy Light notices the access by itself; no restart is needed.
+        """,
+        """
+        Teams Busy Light braucht den Festplattenvollzugriff, um den Status aus den Teams-Logs zu lesen.
+
+        1. Klicke auf „Systemeinstellungen öffnen“. Festplattenvollzugriff und ein Finder-Fenster mit Teams Busy Light öffnen sich.
+        2. Ziehe Teams Busy Light aus dem Finder-Fenster in die Liste (oder klicke auf + und wähle es aus).
+        3. Schalte es ein. Bietet macOS „Beenden & erneut öffnen“ an, klicke auf „Später“.
+
+        Teams Busy Light erkennt die Freigabe von selbst, ein Neustart ist nicht nötig.
+        """
     )
+    static let accessGranted = t(
+        "Access granted. Teams Busy Light now reads your Teams status.",
+        "Zugriff erteilt. Teams Busy Light liest jetzt deinen Teams-Status."
+    )
+    static let logAccess = t("Access to the Teams logs", "Zugriff auf die Teams-Logs")
+    static let logAccessOk = t("Granted", "Erteilt")
+    static let logAccessMissing = t("Missing", "Fehlt")
+    static let logAccessUnknown = t("Checked while Teams is running", "Wird geprüft, solange Teams läuft")
+    static let grantAccess = t("Grant…", "Freigeben …")
 }

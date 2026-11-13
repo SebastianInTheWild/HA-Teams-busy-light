@@ -44,3 +44,16 @@ jobs:
           $results = Invoke-ScriptAnalyzer -Path ./windows -Severity Error
           $results | Format-Table -AutoSize
           if ($results) { exit 1 }
+
+  macos-app:
+    name: Build macOS app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build
+        run: bash macos/build.sh
+      - name: Check
+        run: |
+          app="macos/build/Teams Busy Light.app"
+          lipo -archs "$app/Contents/MacOS/TeamsBusyLight"
+          "$app/Contents/MacOS/TeamsBusyLight" --show

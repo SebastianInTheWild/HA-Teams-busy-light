@@ -84,10 +84,11 @@ enum LoginItem {
         }
     }
 
-    /// Enables the login item once after the first start
-    static func enableOnFirstStart() {
+    /// Enables the login item after the first start, and rewrites an enabled
+    /// one so it points to the current location of the app
+    static func refresh() {
         let key = "loginItemConfigured"
-        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        guard isEnabled || !UserDefaults.standard.bool(forKey: key) else { return }
         do {
             try setEnabled(true)
             UserDefaults.standard.set(true, forKey: key)
