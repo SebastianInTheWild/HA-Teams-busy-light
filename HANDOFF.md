@@ -138,8 +138,62 @@ Testplan Windows (Ergebnisse hier eintragen):
     (aus `version.txt` bzw. `manifest.json`); bei `0.0.0` wird nichts angezeigt.
 11. Danach weiter mit dem Windows-Testplan unten.
 
-Offene Frage des Users: In-App-Updater (bisher bewusst nur Hinweis). Einschätzung siehe Chat
-vom 13.11.2026 – Entscheidung steht aus.
+## Danach: Windows-Signatur (Variante 1) und In-App-Updater (entschieden 13.11.2026)
+
+Erst nach den Windows-Tests oben angehen. Der User hat Variante 1 gewählt: eigenes,
+selbst erstelltes Zertifikat, Signieren in GitHub Actions, kein CA-Zertifikat (SignPath
+Foundation / Azure Trusted Signing evtl. später, ändert am Updater nur den Fingerabdruck).
+
+Ziel: Der Updater installiert nur Dateien, die mit **unserem** Zertifikat signiert sind
+(Pinning des Fingerabdrucks bzw. Designated Requirement). Windows muss dem Zertifikat nicht
+vertrauen. Kein stilles Update: Update-Hinweis bekommt „Jetzt aktualisieren“, Installation
+erst nach Bestätigung.
+
+### Windows-Signatur
+1. `windows/create-signing-certificate.ps1`: `New-SelfSignedCertificate -Type CodeSigningCert
+   -Subject "CN=Teams Busy Light" -KeyAlgorithm RSA -KeyLength 3072 -HashAlgorithm SHA256
+   -NotAfter (+10 Jahre) -CertStoreLocation Cert:\CurrentUser\My`, Export als PFX mit Passwort
+   nach `teams-busy-light-signing/` (gitignored, wie beim Mac), dazu Base64 für das Secret und
+   den Fingerabdruck (SHA-256 des Zertifikats) ausgeben. Zertifikat danach aus dem Store
+   entfernen. Eigenes Zertifikat, nicht das Mac-Zertifikat.
+2. Secrets `WINDOWS_SIGNING_PFX` (Base64) und `WINDOWS_SIGNING_PASSWORD`, wie die macOS-Secrets
+   im **Environment `release` mit Pflicht-Freigabe durch den User** (schützt bei
+   Kontoübernahme nur zusammen mit 2FA; auch die macOS-Secrets dorthin verschieben).
+3. `release.yml`: Job auf `windows-latest` (Environment `release`): PFX laden,
+   `Set-AuthenticodeSignature -HashAlgorithm SHA256 -TimestampServer
+   http://timestamp.digicert.com` auf alle `windows/*.ps1`, dann ZIP bauen. Ohne Secret: ZIP
+   unsigniert (wie ad-hoc beim Mac), Updater lehnt es dann ab.
+4. Fingerabdruck als Konstante in `Common.ps1` (`$SigningThumbprint`); Repo-Builds ohne
+   Signatur bekommen keinen Update-Knopf, nur den Hinweis.
+5. Prüfen (unter Windows): `Get-AuthenticodeSignature` liefert bei nicht vertrauenswürdigem
+   Root `UnknownError`/`NotTrusted`, bei Manipulation `HashMismatch`. Akzeptieren nur, wenn
+   Status nicht `HashMismatch`/`NotSigned` **und** `SignerCertificate` = gepinnter
+   Fingerabdruck. Testen: Datei nach Signatur ändern → muss abgelehnt werden. Klären, ob das
+   ExecutionPolicy-/„Zulassen“-Verhalten sich durch die Signatur ändert (Launcher nutzt
+   Bypass?) und ob die Signaturblöcke Umlaute/Encoding der `.ps1` stören (alle ASCII).
+6. `TeamsBusyLight.exe` wird lokal kompiliert und bleibt unsigniert, wird aber aus den
+   geprüften Quellen gebaut.
+
+### Updater Windows
+- Update-Hinweis (Menü + Balloon) → Frage „Version x installieren?“ → Asset
+  `TeamsBusyLight-Windows.zip` aus `releases/latest` nach `%TEMP%\TeamsBusyLight-Update-<guid>`
+  laden und entpacken, Signatur jeder `.ps1` prüfen (siehe oben), dann `Install.ps1 -Quiet`
+  starten (neuer Parameter: kein Dialog, übernimmt vorhandene Einstellungen, keine Admin-Schritte)
+  und die laufende App beenden (der Installer macht `Stop-TeamsBusyLight` schon) → Installer
+  startet die neue Version. Fehler → Meldung + Log, alte Version läuft weiter.
+- Mark-of-the-Web: per HttpClient geladene Dateien bekommen keins; trotzdem `Unblock-File`.
+
+### Updater macOS
+- ZIP laden, entpacken (`ditto -x -k`), mit `SecStaticCodeCheckValidity` gegen die
+  Designated Requirement der laufenden App prüfen (`certificate leaf = H"…"`); nur bei
+  Erfolg `~/Applications/Teams Busy Light.app` ersetzen (über temporären Namen, dann
+  Austausch) und per `open -n` neu starten, alte Instanz beendet sich (sendet `offline`).
+- Ad-hoc-signierte Builds (ohne Zertifikat) bieten keinen Update-Knopf.
+- Freigaben (Festplattenvollzugriff) bleiben, da gleiches Zertifikat – nach dem ersten
+  echten Update prüfen.
+
+### Doku
+README (beide), CHANGELOG, Hinweis zum Environment `release` und zur Freigabe beim Release.
 
 ## Nächster Schritt: Windows-Tests (auf dem Windows-PC)
 
