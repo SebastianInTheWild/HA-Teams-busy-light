@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.0
 
 * Windows: tray app per user instead of the Windows service; no administrator rights needed (only for the optional hosts file entry). Status icon in the notification area, settings window (webhook URL with test, intervals, Teams language, start at sign-in), Start menu and "Installed apps" entry. The installer takes over the webhook URL and removes the service of earlier versions
 * Windows: umlauts in the German texts fixed (translations are now JSON files)
