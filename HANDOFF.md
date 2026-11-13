@@ -83,7 +83,7 @@ Offen:
 ## Nächster Schritt: Windows-Tests (auf dem Windows-PC)
 
 macOS ist fertig und vom User getestet. Auf Windows noch ungetestet: UAC-Pfade,
-Update vom alten Dienst, Deinstallation. Testplan (Ergebnisse hier eintragen):
+Update vom alten Dienst, Deinstallation mit Hosts-Eintrag und Altdienst. Testplan (Ergebnisse hier eintragen):
 
 1. **Altinstallation vorbereiten:** Ordner `windows` von Tag `v1.2.0`
    (`git worktree add ../tbl-1.2.0 v1.2.0`) mit dessen `Install.cmd` installieren → Dienst
@@ -96,7 +96,8 @@ Update vom alten Dienst, Deinstallation. Testplan (Ergebnisse hier eintragen):
    `# Teams Busy Light` in `%windir%\System32\drivers\etc\hosts`.
 4. **UAC ablehnen:** Installer mit Hosts-Haken, UAC mit „Nein“ → Warnung
    „nicht ausgeführt: Hosts-Eintrag“, Installation trotzdem vollständig.
-5. **Deinstallation über „Installierte Apps“:** Abfrage, Hosts-Frage (Ja → UAC → Zeile
+5. **Deinstallation über „Installierte Apps“** (Grundfall am 12.11. getestet, alles
+   entfernt; offen nur der Hosts-Teil): Abfrage, Hosts-Frage (Ja → UAC → Zeile
    weg), danach weg: Autostart (`HKCU\...\Run`), Startmenü, Eintrag in „Installierte
    Apps“, `%LOCALAPPDATA%\Programs\TeamsBusyLight`, `%LOCALAPPDATA%\TeamsBusyLight`;
    HA bekommt `offline`.
