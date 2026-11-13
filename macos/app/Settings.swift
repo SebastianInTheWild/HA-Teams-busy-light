@@ -8,12 +8,22 @@ struct AppSettings: Equatable {
     var heartbeatSeconds = 60
     var pollSeconds = 2
     var checkForUpdates = true
+    /// Send only while the Mac is in one of these networks (CIDR, comma
+    /// separated); empty = everywhere
+    var homeNetworks = ""
+    /// Ask whether to add a network that is not in homeNetworks
+    var askForNewNetworks = true
+    /// Networks the user chose not to add (not asked again)
+    var ignoredNetworks = ""
 
     private enum Key {
         static let webhookURL = "webhookURL"
         static let heartbeatSeconds = "heartbeatSeconds"
         static let pollSeconds = "pollSeconds"
         static let checkForUpdates = "checkForUpdates"
+        static let homeNetworks = "homeNetworks"
+        static let askForNewNetworks = "askForNewNetworks"
+        static let ignoredNetworks = "ignoredNetworks"
     }
 
     static func load() -> AppSettings {
@@ -29,6 +39,11 @@ struct AppSettings: Equatable {
         if defaults.object(forKey: Key.checkForUpdates) != nil {
             settings.checkForUpdates = defaults.bool(forKey: Key.checkForUpdates)
         }
+        settings.homeNetworks = (defaults.string(forKey: Key.homeNetworks) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if defaults.object(forKey: Key.askForNewNetworks) != nil {
+            settings.askForNewNetworks = defaults.bool(forKey: Key.askForNewNetworks)
+        }
+        settings.ignoredNetworks = defaults.string(forKey: Key.ignoredNetworks) ?? ""
         return settings
     }
 
@@ -38,6 +53,9 @@ struct AppSettings: Equatable {
         defaults.set(heartbeatSeconds, forKey: Key.heartbeatSeconds)
         defaults.set(pollSeconds, forKey: Key.pollSeconds)
         defaults.set(checkForUpdates, forKey: Key.checkForUpdates)
+        defaults.set(homeNetworks, forKey: Key.homeNetworks)
+        defaults.set(askForNewNetworks, forKey: Key.askForNewNetworks)
+        defaults.set(ignoredNetworks, forKey: Key.ignoredNetworks)
     }
 
     var isConfigured: Bool { AppSettings.isValidWebhook(webhookURL) }

@@ -88,10 +88,12 @@ Open **Settings…** in the menu (or double-click the app in `~/Applications`):
 | Webhook URL | – | Webhook URL of the integration entry; **Send Test** sends the current status |
 | Keep-alive | 60 s | Must be shorter than the offline timeout of the integration (default 180 s) |
 | Check Teams | 2 s | Check interval |
+| Send only in these networks | empty | Optional list of networks (e.g. `192.168.1.0/24, 10.0.0.0/8`); outside them nothing is sent, not even through an externally reachable webhook URL. **Add Current Network** fills in the network the Mac is in. Empty = send everywhere |
+| Ask when in a new network | on | While networks are set: asks whether to add a network the Mac is in that is not in the list yet ("Don't Add" is remembered) |
 | Start at login | on | Start the app after login |
 | Check for updates daily | on | Shows a menu entry and a notification when a new release is available; the update itself is downloaded from the release page |
 
-The app sends `offline` when it is quit and before the Mac goes to sleep.
+The app sends `offline` when it is quit and before the Mac goes to sleep (only inside the networks above). Outside the networks Home Assistant sets Teams offline after the offline timeout of the integration.
 
 ## Verification
 

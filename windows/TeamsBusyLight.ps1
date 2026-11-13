@@ -88,6 +88,9 @@ $State = @{
     UpdateTask = $null
     UpdateVersion = $null
     LastUpdateCheck = [datetime]::MinValue
+    Away = $false
+    LastNetworkCheck = [datetime]::MinValue
+    AskingNetwork = $false
 }
 $AppVersion = Get-TeamsVersion
 
@@ -180,6 +183,9 @@ function Update-TrayDisplay {
     if (-not $Config.WebhookUrl) {
         $ConnectionItem.Text = $Messages.MenuNotConfigured
     }
+    elseif ($State.Away) {
+        $ConnectionItem.Text = $Messages.MenuAway
+    }
     elseif ($State.SendError) {
         $ConnectionItem.Text = $Messages.MenuSendFailed
     }
@@ -264,6 +270,7 @@ function Open-TeamsSettings {
             $State.RetryAfter = [datetime]::MinValue
             $State.SendError = $null
             $State.LastPoll = [datetime]::MinValue
+            $State.LastNetworkCheck = [datetime]::MinValue
             Update-TrayDisplay
         }
     }
@@ -281,6 +288,9 @@ function Complete-TeamsSend {
     }
     $State.SendTask = $null
     $SendError = Get-TeamsSendError $Task
+    if ($State.Away) {
+        return
+    }
     if ($SendError) {
         if ($SendError -ne $State.SendError) {
             Write-TeamsLog ($Messages.LogSendFailed -f $SendError)
@@ -334,8 +344,74 @@ function Update-TeamsState {
     }
 }
 
+# Pauses sending outside the networks set under "Send only in these networks";
+# Home Assistant then sets Teams offline after its timeout
+function Update-TeamsNetworkState {
+    if (((Get-Date) - $State.LastNetworkCheck).TotalSeconds -lt 5) {
+        return
+    }
+    $State.LastNetworkCheck = Get-Date
+    $Away = -not (Test-TeamsHomeNetwork $Config.HomeNetworks)
+    if ($Away -eq $State.Away) {
+        return
+    }
+    $State.Away = $Away
+    if ($Away) {
+        Write-TeamsLog $Messages.LogAway
+        $State.SendError = $null
+    }
+    else {
+        Write-TeamsLog $Messages.LogHome
+        $State.SentStatus = $null
+        $State.RetryAfter = [datetime]::MinValue
+    }
+    Update-TrayDisplay
+}
+
+# Asks whether to add a network the PC is in that is not a home network yet.
+# "No" remembers the network, so it is asked only once.
+function Request-TeamsNewNetwork {
+    if (-not $State.Away -or -not $Config.AskForNewNetworks -or $State.AskingNetwork -or $State.SettingsOpen) {
+        return
+    }
+    $Network = @(Get-TeamsNewNetworks $Config.HomeNetworks $Config.IgnoredNetworks) | Select-Object -First 1
+    if (-not $Network) {
+        return
+    }
+    $State.AskingNetwork = $true
+    try {
+        $Answer = [System.Windows.Forms.MessageBox]::Show(
+            ($Messages.NewNetworkText -f $Network),
+            $Messages.AppName,
+            [System.Windows.Forms.MessageBoxButtons]::YesNoCancel,
+            [System.Windows.Forms.MessageBoxIcon]::Question,
+            [System.Windows.Forms.MessageBoxDefaultButton]::Button1,
+            [System.Windows.Forms.MessageBoxOptions]::DefaultDesktopOnly
+        )
+        switch ($Answer) {
+            'Yes' {
+                $Config.HomeNetworks = Add-TeamsNetworkText $Config.HomeNetworks @($Network)
+                Write-TeamsLog ($Messages.LogNetworkAdded -f $Network)
+            }
+            'No' {
+                $Config.IgnoredNetworks = Add-TeamsNetworkText $Config.IgnoredNetworks @($Network)
+                Write-TeamsLog ($Messages.LogNetworkIgnored -f $Network)
+            }
+            default {
+                $Config.AskForNewNetworks = $false
+                Write-TeamsLog $Messages.LogNetworkAskOff
+            }
+        }
+        Save-TeamsSettings $Config
+        $State.LastNetworkCheck = [datetime]::MinValue
+    }
+    finally {
+        $State.AskingNetwork = $false
+    }
+}
+
 function Invoke-TeamsSend {
-    if (-not $Config.WebhookUrl -or $State.SendTask -or -not $State.Status) {
+    if (-not $Config.WebhookUrl -or $State.Away -or $State.SendTask -or -not $State.Status) {
         return
     }
     $Now = Get-Date
@@ -351,7 +427,7 @@ function Invoke-TeamsSend {
 function Exit-TeamsBusyLight {
     $Timer.Stop()
     # Tell Home Assistant right away instead of waiting for the timeout
-    if ($Config.WebhookUrl) {
+    if ($Config.WebhookUrl -and (Test-TeamsHomeNetwork $Config.HomeNetworks)) {
         [void](Send-TeamsStatus -WebhookUrl $Config.WebhookUrl -Status 'offline' -Activity 'not_in_call' -TimeoutSeconds 3)
     }
     $Tray.Visible = $false
@@ -375,6 +451,8 @@ $Timer.Add_Tick({
             $State.LastPoll = Get-Date
             Update-TeamsState
         }
+        Update-TeamsNetworkState
+        Request-TeamsNewNetwork
         Invoke-TeamsSend
         Invoke-TeamsUpdateCheck
     }

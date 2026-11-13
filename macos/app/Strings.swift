@@ -36,6 +36,7 @@ enum L {
     }
     static let menuSendFailed = t("Home Assistant: not reachable", "Home Assistant: nicht erreichbar")
     static let menuNotConfigured = t("Home Assistant: webhook URL missing", "Home Assistant: Webhook-URL fehlt")
+    static let menuAway = t("Home Assistant: paused (not in a home network)", "Home Assistant: pausiert (nicht im Heimnetz)")
     static let menuConnecting = t("Home Assistant: connecting…", "Home Assistant: wird verbunden …")
     static let menuNoLogAccess = t("No access to the Teams logs", "Kein Zugriff auf die Teams-Logs")
     static let menuSettings = t("Settings…", "Einstellungen …")
@@ -66,6 +67,28 @@ enum L {
     )
     static func poll(_ seconds: Int) -> String {
         t("Check Teams every \(seconds) s", "Teams prüfen alle \(seconds) s")
+    }
+    static let homeNetworks = t("Send only in these networks", "Nur in diesen Netzen senden")
+    static let homeNetworksHint = t(
+        "Optional, e.g. 192.168.1.0/24; separate several networks with commas. Outside these networks nothing is sent, not even through an externally reachable URL; Home Assistant sets Teams offline after its timeout. Empty = send everywhere.",
+        "Optional, z. B. 192.168.1.0/24; mehrere Netze mit Komma trennen. Außerhalb dieser Netze wird nichts gesendet, auch nicht über eine von außen erreichbare URL; Home Assistant setzt Teams nach dem Timeout auf offline. Leer = überall senden."
+    )
+    static let askForNewNetworks = t("Ask when in a new network", "Bei einem neuen Netz fragen")
+    static func newNetworkTitle(_ network: String) -> String {
+        t("New network: \(network)", "Neues Netz: \(network)")
+    }
+    static let newNetworkText = t(
+        "The Mac is in a network that is not in \"Send only in these networks\". Teams Busy Light sends nothing here. Add the network so the status is sent here as well?",
+        "Der Mac ist in einem Netz, das nicht unter „Nur in diesen Netzen senden“ steht. Teams Busy Light sendet hier nichts. Netz hinzufügen, damit der Status auch hier gesendet wird?"
+    )
+    static let addNetwork = t("Add", "Hinzufügen")
+    static let dontAddNetwork = t("Don't Add", "Nicht hinzufügen")
+    static let dontAskAgain = t("Don't ask again (can be turned on in the settings)", "Nicht mehr fragen (in den Einstellungen wieder einschaltbar)")
+    static let addCurrentNetwork = t("Add Current Network", "Aktuelles Netz hinzufügen")
+    static let noCurrentNetwork = t("No active network found.", "Kein aktives Netz gefunden.")
+    static func invalidNetwork(_ entry: String) -> String {
+        t("\"\(entry)\" is not a valid network. Enter networks like 192.168.1.0/24.",
+          "„\(entry)“ ist kein gültiges Netz. Gib Netze wie 192.168.1.0/24 ein.")
     }
     static let autostart = t("Start at login", "Bei der Anmeldung starten")
     static let test = t("Send Test", "Test senden")

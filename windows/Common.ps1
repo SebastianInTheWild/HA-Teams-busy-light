@@ -86,6 +86,154 @@ function Test-WebhookUrl {
     )
 }
 
+# --- Send only in these networks -------------------------------------------
+# Teams Busy Light sends only while the PC has an address in one of the
+# networks (CIDR, e.g. 192.168.1.0/24), so it does not send through an
+# externally reachable webhook URL while on the road. Empty = everywhere.
+
+# Splits the entered list (commas, semicolons or spaces)
+function Split-TeamsNetworkText {
+    param([string]$Text)
+
+    return @(([string]$Text) -split '[,;\s]+' | Where-Object { $_ })
+}
+
+# Returns @{ Bytes; Prefix } or $null if the entry is not a valid network
+function ConvertFrom-TeamsNetwork {
+    param([string]$Text)
+
+    $Parts = $Text.Split('/')
+    if ($Parts.Count -gt 2) { return $null }
+    $Address = $null
+    if (-not [System.Net.IPAddress]::TryParse($Parts[0], [ref]$Address)) { return $null }
+    # IPAddress also accepts shortened forms like "10.1"
+    if ($Address.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork -and $Parts[0].Split('.').Count -ne 4) { return $null }
+    $Bytes = $Address.GetAddressBytes()
+    $Prefix = $Bytes.Length * 8
+    if ($Parts.Count -eq 2) {
+        $Value = 0
+        if (-not [int]::TryParse($Parts[1], [ref]$Value) -or $Value -lt 0 -or $Value -gt $Prefix) { return $null }
+        $Prefix = $Value
+    }
+    return @{ Bytes = $Bytes; Prefix = $Prefix }
+}
+
+# Returns the first invalid entry of the list, $null if all are valid
+function Find-TeamsInvalidNetwork {
+    param([string]$Text)
+
+    foreach ($Entry in (Split-TeamsNetworkText $Text)) {
+        if (-not (ConvertFrom-TeamsNetwork $Entry)) {
+            return $Entry
+        }
+    }
+    return $null
+}
+
+function Test-TeamsAddressInNetwork {
+    param([byte[]]$Address, [hashtable]$Network)
+
+    if ($Address.Length -ne $Network.Bytes.Length) { return $false }
+    $Bits = $Network.Prefix
+    for ($Index = 0; $Index -lt $Address.Length -and $Bits -gt 0; $Index++) {
+        $Mask = if ($Bits -ge 8) { 255 } else { (255 -shl (8 - $Bits)) -band 255 }
+        if (($Address[$Index] -band $Mask) -ne ($Network.Bytes[$Index] -band $Mask)) { return $false }
+        $Bits -= 8
+    }
+    return $true
+}
+
+function Get-TeamsActiveInterfaces {
+    return @([System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() | Where-Object {
+        $_.OperationalStatus -eq [System.Net.NetworkInformation.OperationalStatus]::Up -and
+        $_.NetworkInterfaceType -ne [System.Net.NetworkInformation.NetworkInterfaceType]::Loopback
+    })
+}
+
+# True when no networks are set or an active interface has an address in one of them
+function Test-TeamsHomeNetwork {
+    param([string]$Text)
+
+    $Networks = @(Split-TeamsNetworkText $Text | ForEach-Object { ConvertFrom-TeamsNetwork $_ } | Where-Object { $_ })
+    if ($Networks.Count -eq 0) {
+        return $true
+    }
+    foreach ($Interface in (Get-TeamsActiveInterfaces)) {
+        foreach ($Unicast in $Interface.GetIPProperties().UnicastAddresses) {
+            $Bytes = $Unicast.Address.GetAddressBytes()
+            foreach ($Network in $Networks) {
+                if (Test-TeamsAddressInNetwork $Bytes $Network) {
+                    return $true
+                }
+            }
+        }
+    }
+    return $false
+}
+
+# IPv4 networks of the active interfaces with a gateway (no VPN tunnels),
+# e.g. "192.168.1.0/24", for "Add current network"
+function Get-TeamsCurrentNetworks {
+    $Result = New-Object System.Collections.Generic.List[string]
+    foreach ($Interface in (Get-TeamsActiveInterfaces)) {
+        if ($Interface.NetworkInterfaceType -in @(
+            [System.Net.NetworkInformation.NetworkInterfaceType]::Tunnel,
+            [System.Net.NetworkInformation.NetworkInterfaceType]::Ppp)) {
+            continue
+        }
+        $Properties = $Interface.GetIPProperties()
+        if (@($Properties.GatewayAddresses | Where-Object { -not $_.Address.Equals([System.Net.IPAddress]::Any) }).Count -eq 0) {
+            continue
+        }
+        foreach ($Unicast in $Properties.UnicastAddresses) {
+            if ($Unicast.Address.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { continue }
+            $Bytes = $Unicast.Address.GetAddressBytes()
+            if ($Bytes[0] -eq 169 -and $Bytes[1] -eq 254) { continue }
+            $Prefix = [int]$Unicast.PrefixLength
+            $Bits = $Prefix
+            for ($Index = 0; $Index -lt 4; $Index++) {
+                $Mask = if ($Bits -ge 8) { 255 } elseif ($Bits -le 0) { 0 } else { (255 -shl (8 - $Bits)) -band 255 }
+                $Bytes[$Index] = $Bytes[$Index] -band $Mask
+                $Bits -= 8
+            }
+            $Network = '{0}/{1}' -f ([System.Net.IPAddress]::new($Bytes)), $Prefix
+            if (-not $Result.Contains($Network)) {
+                $Result.Add($Network)
+            }
+        }
+    }
+    return $Result.ToArray()
+}
+
+# Current networks that are neither covered by the home networks nor
+# ignored; only while home networks are set (otherwise everything is sent)
+function Get-TeamsNewNetworks {
+    param([string]$HomeNetworks, [string]$IgnoredNetworks)
+
+    $Networks = @(Split-TeamsNetworkText $HomeNetworks | ForEach-Object { ConvertFrom-TeamsNetwork $_ } | Where-Object { $_ })
+    if ($Networks.Count -eq 0) {
+        return @()
+    }
+    $Ignored = @(Split-TeamsNetworkText $IgnoredNetworks)
+    return @(Get-TeamsCurrentNetworks | Where-Object {
+        $Bytes = (ConvertFrom-TeamsNetwork $_).Bytes
+        $_ -notin $Ignored -and -not ($Networks | Where-Object { Test-TeamsAddressInNetwork $Bytes $_ })
+    })
+}
+
+# Appends networks to a list, without duplicates
+function Add-TeamsNetworkText {
+    param([string]$Text, [string[]]$Networks)
+
+    $Entries = New-Object System.Collections.Generic.List[string]
+    foreach ($Entry in @(Split-TeamsNetworkText $Text) + $Networks) {
+        if ($Entry -and -not $Entries.Contains($Entry)) {
+            $Entries.Add($Entry)
+        }
+    }
+    return $Entries -join ', '
+}
+
 function Read-TeamsSettings {
     $Values = [ordered]@{
         WebhookUrl = ''
@@ -93,6 +241,9 @@ function Read-TeamsSettings {
         PollSeconds = 2
         TeamsLanguage = 'auto'
         CheckForUpdates = $true
+        HomeNetworks = ''
+        AskForNewNetworks = $true
+        IgnoredNetworks = ''
     }
     if (Test-Path $SettingsPath) {
         try {
@@ -111,6 +262,9 @@ function Read-TeamsSettings {
     $Values.HeartbeatSeconds = [Math]::Min([Math]::Max([int]$Values.HeartbeatSeconds, 10), 3600)
     $Values.PollSeconds = [Math]::Min([Math]::Max([int]$Values.PollSeconds, 1), 60)
     $Values.CheckForUpdates = [bool]$Values.CheckForUpdates
+    $Values.HomeNetworks = ([string]$Values.HomeNetworks).Trim()
+    $Values.AskForNewNetworks = [bool]$Values.AskForNewNetworks
+    $Values.IgnoredNetworks = ([string]$Values.IgnoredNetworks).Trim()
     if ($Values.TeamsLanguage -notin @('auto', 'de', 'en')) {
         $Values.TeamsLanguage = 'auto'
     }
@@ -543,7 +697,37 @@ function Show-TeamsSettingsDialog {
     [void]$LanguageInput.Items.AddRange(@($Messages.TeamsLanguageAuto, $Messages.TeamsLanguageDe, $Messages.TeamsLanguageEn))
     $LanguageInput.SelectedIndex = [Math]::Max([array]::IndexOf($LanguageCodes, [string]$Settings.TeamsLanguage), 0)
     $Form.Controls.Add($LanguageInput)
-    $Y = $LanguageInput.Bottom + 18
+    $Y = $LanguageInput.Bottom + 16
+
+    [void](& $AddLabel $Messages.HomeNetworks $Margin $Y $InnerWidth)
+    $Y += 24
+    $NetworkButtonWidth = 190
+    $NetworksInput = New-Object System.Windows.Forms.TextBox
+    $NetworksInput.Location = New-Object System.Drawing.Point($Margin, $Y)
+    $NetworksInput.Size = New-Object System.Drawing.Size(($InnerWidth - $NetworkButtonWidth - 10), 27)
+    $NetworksInput.Font = New-TeamsFont 10
+    $NetworksInput.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+    $NetworksInput.Text = [string]$Settings.HomeNetworks
+    $Form.Controls.Add($NetworksInput)
+    $NetworkButton = New-Object System.Windows.Forms.Button
+    $NetworkButton.Location = New-Object System.Drawing.Point(($Margin + $InnerWidth - $NetworkButtonWidth), ($Y - 1))
+    $NetworkButton.Size = New-Object System.Drawing.Size($NetworkButtonWidth, 29)
+    $NetworkButton.Text = $Messages.AddCurrentNetwork
+    $NetworkButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+    $NetworkButton.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(205, 213, 224)
+    $NetworkButton.BackColor = [System.Drawing.Color]::White
+    $NetworkButton.ForeColor = [System.Drawing.Color]::FromArgb(45, 80, 145)
+    $Form.Controls.Add($NetworkButton)
+    $Y = $NetworksInput.Bottom + 4
+    $Hint = & $AddLabel $Messages.HomeNetworksHint $Margin $Y $InnerWidth -Hint
+    $Y = $Hint.Bottom + 4
+    $AskNetworksInput = New-Object System.Windows.Forms.CheckBox
+    $AskNetworksInput.Location = New-Object System.Drawing.Point($Margin, $Y)
+    $AskNetworksInput.Size = New-Object System.Drawing.Size($InnerWidth, 24)
+    $AskNetworksInput.Text = $Messages.AskForNewNetworks
+    $AskNetworksInput.Checked = [bool]$Settings.AskForNewNetworks
+    $Form.Controls.Add($AskNetworksInput)
+    $Y = $AskNetworksInput.Bottom + 16
 
     $AutostartInput = New-Object System.Windows.Forms.CheckBox
     $AutostartInput.Location = New-Object System.Drawing.Point($Margin, $Y)
@@ -629,6 +813,15 @@ function Show-TeamsSettingsDialog {
         )
     }
 
+    $NetworkButton.Add_Click({
+        $Current = @(Get-TeamsCurrentNetworks)
+        if ($Current.Count -eq 0) {
+            [void][System.Windows.Forms.MessageBox]::Show($Form, $Messages.NoCurrentNetwork, $Messages.AppName)
+            return
+        }
+        $NetworksInput.Text = Add-TeamsNetworkText $NetworksInput.Text $Current
+    })
+
     $TestButton.Add_Click({
         $Url = $WebhookInput.Text.Trim()
         if (-not (Test-WebhookUrl $Url)) {
@@ -669,12 +862,27 @@ function Show-TeamsSettingsDialog {
                 & $ShowInvalidWebhook
                 continue
             }
+            $Networks = $NetworksInput.Text.Trim()
+            $InvalidNetwork = Find-TeamsInvalidNetwork $Networks
+            if ($InvalidNetwork) {
+                [void][System.Windows.Forms.MessageBox]::Show(
+                    $Form,
+                    ($Messages.InvalidNetwork -f $InvalidNetwork),
+                    $Messages.InvalidTitle,
+                    [System.Windows.Forms.MessageBoxButtons]::OK,
+                    [System.Windows.Forms.MessageBoxIcon]::Warning
+                )
+                continue
+            }
             $NewSettings = [pscustomobject][ordered]@{
                 WebhookUrl = $Url
                 HeartbeatSeconds = [int]$HeartbeatInput.Value
                 PollSeconds = [int]$PollInput.Value
                 TeamsLanguage = $LanguageCodes[$LanguageInput.SelectedIndex]
                 CheckForUpdates = $UpdatesInput.Checked
+                HomeNetworks = $Networks
+                AskForNewNetworks = $AskNetworksInput.Checked
+                IgnoredNetworks = [string]$Settings.IgnoredNetworks
             }
             return @{
                 Settings = $NewSettings

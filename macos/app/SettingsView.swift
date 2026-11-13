@@ -9,6 +9,9 @@ final class SettingsModel: ObservableObject {
     @Published var pollSeconds: Int
     @Published var autostart: Bool
     @Published var checkForUpdates: Bool
+    @Published var homeNetworks: String
+    @Published var askForNewNetworks: Bool
+    let ignoredNetworks: String
     @Published var testing = false
     @Published var testResult: (text: String, ok: Bool)?
     @Published var error: String?
@@ -21,6 +24,9 @@ final class SettingsModel: ObservableObject {
         pollSeconds = settings.pollSeconds
         self.autostart = autostart
         checkForUpdates = settings.checkForUpdates
+        homeNetworks = settings.homeNetworks
+        askForNewNetworks = settings.askForNewNetworks
+        ignoredNetworks = settings.ignoredNetworks
     }
 }
 
@@ -89,6 +95,18 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    TextField(L.homeNetworks, text: $model.homeNetworks, prompt: Text("192.168.1.0/24"))
+                        .onChange(of: model.homeNetworks) { _ in model.error = nil }
+                    HStack {
+                        Spacer()
+                        Button(L.addCurrentNetwork, action: addCurrentNetwork)
+                    }
+                    Toggle(L.askForNewNetworks, isOn: $model.askForNewNetworks)
+                } footer: {
+                    hint(L.homeNetworksHint)
+                }
+
+                Section {
                     Toggle(L.autostart, isOn: $model.autostart)
                     Toggle(L.checkForUpdates, isOn: $model.checkForUpdates)
                 }
@@ -143,10 +161,25 @@ struct SettingsView: View {
         }
     }
 
+    /// Appends the networks the Mac is in right now
+    private func addCurrentNetwork() {
+        let current = HomeNetwork.currentNetworks()
+        guard !current.isEmpty else {
+            model.error = L.noCurrentNetwork
+            return
+        }
+        model.homeNetworks = HomeNetwork.adding(current, to: model.homeNetworks)
+    }
+
     private func save() {
         let url = trimmedURL
         guard AppSettings.isValidWebhook(url) else {
             model.error = L.invalidWebhook
+            return
+        }
+        let networks = model.homeNetworks.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let invalid = HomeNetwork.parse(networks).invalid {
+            model.error = L.invalidNetwork(invalid)
             return
         }
         var settings = AppSettings()
@@ -154,6 +187,9 @@ struct SettingsView: View {
         settings.heartbeatSeconds = model.heartbeatSeconds
         settings.pollSeconds = model.pollSeconds
         settings.checkForUpdates = model.checkForUpdates
+        settings.homeNetworks = networks
+        settings.askForNewNetworks = model.askForNewNetworks
+        settings.ignoredNetworks = model.ignoredNetworks
         onSave(settings, model.autostart)
     }
 }

@@ -214,10 +214,14 @@ final class TeamsMonitor {
     private(set) var inCall = false
     private(set) var lastSent: Date?
     private(set) var sendError: String?
+    /// True while "send only in these networks" is set and the Mac is in none of them
+    private(set) var awayFromHome = false
     var logAccessDenied: Bool { logReader.accessDenied }
 
     /// Called on the main queue whenever something shown in the menu changes
     var onChange: (() -> Void)?
+    /// Called on every check while not in a home network (to offer adding it)
+    var onAway: (() -> Void)?
 
     private var settings: AppSettings
     private let logReader = TeamsLogReader()
@@ -253,11 +257,16 @@ final class TeamsMonitor {
         start()
     }
 
+    /// True when the webhook is set and the Mac is in an allowed network
+    var maySend: Bool {
+        settings.isConfigured && HomeNetwork.isHome(settings.homeNetworks)
+    }
+
     /// Stops checking and tells Home Assistant (e.g. before sleep)
     func pause() {
         paused = true
         timer?.invalidate()
-        if settings.isConfigured {
+        if maySend {
             Webhook.sendAndWait(url: settings.webhookURL, status: "offline", inCall: false, timeout: 3)
         }
         sentStatus = nil
@@ -302,6 +311,24 @@ final class TeamsMonitor {
             changed = true
         }
 
+        let away = !HomeNetwork.isHome(settings.homeNetworks)
+        if away != awayFromHome {
+            awayFromHome = away
+            if away {
+                // Nothing is sent; Home Assistant sets Teams offline after its timeout
+                Log.write("Not in a home network, sending paused")
+                sendError = nil
+            } else {
+                Log.write("Back in a home network, sending again")
+                sentStatus = nil
+                retryAfter = .distantPast
+            }
+            onChange?()
+        }
+        if away {
+            onAway?()
+        }
+
         if changed {
             Log.write("Status: \(status ?? "none"), activity: \(inCall ? "in_call" : "not_in_call")")
             onChange?()
@@ -310,7 +337,7 @@ final class TeamsMonitor {
     }
 
     private func sendIfNeeded() {
-        guard settings.isConfigured, !sending, Date() >= retryAfter else { return }
+        guard settings.isConfigured, !awayFromHome, !sending, Date() >= retryAfter else { return }
         let due = Date().timeIntervalSince(lastSent ?? .distantPast) >= TimeInterval(settings.heartbeatSeconds)
         guard status != sentStatus || inCall != sentInCall || due else { return }
 
@@ -320,6 +347,9 @@ final class TeamsMonitor {
         Webhook.send(url: settings.webhookURL, status: sendStatus, inCall: sendInCall) { [weak self] reason in
             guard let self else { return }
             self.sending = false
+            if self.awayFromHome {
+                return
+            }
             if let reason {
                 if reason != self.sendError {
                     Log.write("Failed to send status to Home Assistant: \(reason)")

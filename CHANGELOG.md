@@ -8,6 +8,7 @@
 * macOS: native menu bar app instead of the script; same status icon as on Windows, settings window (webhook URL with test, intervals, start at login), guides through granting Full Disk Access, sends `offline` when quitting or going to sleep. `install.sh` takes over the settings of the script version
 * macOS: the release contains the signed app (`TeamsBusyLight-macOS.zip`); granted permissions are kept after updates
 * macOS and Windows: optional daily check for a new release, shown in the menu (no automatic installation)
+* macOS and Windows: optional "Send only in these networks" (e.g. `192.168.1.0/24`): outside these networks nothing is sent to Home Assistant, even if the webhook URL is reachable from outside; asks whether to add a new network (can be turned off)
 * Blueprint: optionally play music or radio on a media player; stop during calls and while offline
 
 ## 1.2.0

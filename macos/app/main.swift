@@ -41,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
         monitor = TeamsMonitor(settings: settings)
         monitor.onChange = { [weak self] in self?.refresh() }
+        monitor.onAway = { [weak self] in self?.offerNewNetwork() }
         updateChecker.onChange = { [weak self] in self?.updateChanged() }
         UNUserNotificationCenter.current().delegate = self
         LoginItem.refresh()
@@ -78,7 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        if settings.isConfigured {
+        if monitor.maySend {
             Webhook.sendAndWait(url: settings.webhookURL, status: "offline", inCall: false, timeout: 3)
         }
         Log.write("Teams Busy Light stopped")
@@ -143,6 +144,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         connectionLine.toolTip = nil
         if !settings.isConfigured {
             connectionLine.title = L.menuNotConfigured
+        } else if monitor.awayFromHome {
+            connectionLine.title = L.menuAway
         } else if let error = monitor.sendError {
             connectionLine.title = L.menuSendFailed
             connectionLine.toolTip = error
@@ -271,6 +274,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
         refresh()
         settingsWindow?.close()
+    }
+
+    private var askingNetwork = false
+
+    /// Asks whether to add a network the Mac is in that is not a home network
+    /// yet. "Don't Add" remembers the network, so it is asked only once.
+    private func offerNewNetwork() {
+        guard settings.askForNewNetworks, !askingNetwork, settingsWindow == nil,
+              let network = HomeNetwork.newNetworks(home: settings.homeNetworks, ignored: settings.ignoredNetworks).first
+        else { return }
+        askingNetwork = true
+        // Not inside the timer callback of the monitor
+        DispatchQueue.main.async { [self] in
+            defer { askingNetwork = false }
+            let alert = NSAlert()
+            alert.messageText = L.newNetworkTitle(network)
+            alert.informativeText = L.newNetworkText
+            alert.addButton(withTitle: L.addNetwork)
+            alert.addButton(withTitle: L.dontAddNetwork)
+            alert.showsSuppressionButton = true
+            alert.suppressionButton?.title = L.dontAskAgain
+            NSApp.activate(ignoringOtherApps: true)
+            let response = alert.runModal()
+
+            var newSettings = settings
+            if response == .alertFirstButtonReturn {
+                newSettings.homeNetworks = HomeNetwork.adding([network], to: settings.homeNetworks)
+                Log.write("Network added: \(network)")
+            } else {
+                newSettings.ignoredNetworks = HomeNetwork.adding([network], to: settings.ignoredNetworks)
+                Log.write("Network not added: \(network)")
+            }
+            if alert.suppressionButton?.state == .on {
+                newSettings.askForNewNetworks = false
+            }
+            newSettings.save()
+            settings = newSettings
+            monitor.update(settings: settings)
+            refresh()
+        }
     }
 
     @objc private func showLog() {

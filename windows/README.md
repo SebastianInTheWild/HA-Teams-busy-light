@@ -108,6 +108,8 @@ Open **Settings…** in the menu of the tray icon or **Teams Busy Light** in the
 | Keep-alive every (seconds) | 60 | Must be shorter than the offline timeout of the integration (default 180 s) |
 | Check Teams every (seconds) | 2 | Check interval |
 | Language of the Teams app | Detect automatically | German or English, if the detection fails |
+| Send only in these networks | empty | Optional list of networks (e.g. `192.168.1.0/24, 10.0.0.0/8`); outside them nothing is sent, not even through an externally reachable webhook URL. **Add current network** fills in the network the PC is in. Empty = send everywhere |
+| Ask whether to add a new network | on | While networks are set: asks whether to add a network the PC is in that is not in the list yet ("No" is remembered, "Cancel" stops asking) |
 | Start when I sign in to Windows | on | Start the app at sign-in |
 | Check for updates daily | on | Shows a menu entry and a notification when a new release is available; the update itself is downloaded from the release page |
 
