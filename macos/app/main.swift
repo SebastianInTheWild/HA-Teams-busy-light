@@ -6,6 +6,7 @@ import UserNotifications
 /// offers the settings. Command line:
 ///   TeamsBusyLight --show                         print the detected state once
 ///   TeamsBusyLight --set-status busy [in_call]    send a status once
+///   TeamsBusyLight --install-update <url> <ver>   install an update (tests)
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     private var settings = AppSettings.load()
     private var monitor: TeamsMonitor!
@@ -21,12 +22,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         set { UserDefaults.standard.set(newValue, forKey: "logAccessDenied") }
     }
     private var settingsModel: SettingsModel?
+    /// Version being installed by the updater
+    private var installingVersion: String?
+    /// Quitting for an update: the new version sends the status right away
+    private var quittingForUpdate = false
 
     private let statusLine = NSMenuItem()
     private let activityLine = NSMenuItem()
     private let connectionLine = NSMenuItem()
     private let accessItem = NSMenuItem(title: L.menuNoLogAccess, action: #selector(showAccessHint), keyEquivalent: "")
-    private let updateItem = NSMenuItem(title: "", action: #selector(openReleasePage), keyEquivalent: "")
+    private let updateItem = NSMenuItem(title: "", action: #selector(updateClicked), keyEquivalent: "")
     private let pauseItem = NSMenuItem(title: L.menuPause, action: nil, keyEquivalent: "")
     private let resumeItem = NSMenuItem(title: L.menuResume, action: #selector(resumeSending), keyEquivalent: "")
     private let pauseTimeFormatter: DateFormatter = {
@@ -88,7 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        if monitor.maySend {
+        if monitor.maySend && !quittingForUpdate {
             Webhook.sendAndWait(url: settings.webhookURL, status: "offline", inCall: false, timeout: 3)
         }
         Log.write("Teams Busy Light stopped")
@@ -187,7 +192,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         } else if accessWasDenied && monitor.status != nil {
             accessWasDenied = false
             Log.write("Access to the Teams logs granted")
-            notify(id: "access", L.accessGranted, alertIfNotAllowed: true)
+            notify(id: "access", L.accessGranted)
         }
         settingsModel?.logAccess = Teams.isRunning ? !monitor.logAccessDenied : nil
         if monitor.logAccessDenied && !accessHintShown {
@@ -196,8 +201,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             accessHintShown = true
             DispatchQueue.main.async { [weak self] in self?.showAccessHint() }
         }
-        if let version = updateChecker.availableVersion {
-            updateItem.title = L.menuUpdate(version)
+        if let version = installingVersion {
+            updateItem.title = L.menuInstallingUpdate(version)
+            updateItem.isEnabled = false
+            updateItem.isHidden = false
+        } else if let version = updateChecker.availableVersion {
+            updateItem.title = updateChecker.downloadURL != nil ? L.menuInstallUpdate(version) : L.menuUpdate(version)
+            updateItem.isEnabled = true
             updateItem.isHidden = false
         } else {
             updateItem.isHidden = true
@@ -383,6 +393,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         NSWorkspace.shared.open(UpdateChecker.releasesPage)
     }
 
+    /// Menu item and notification: install the update (after asking) or
+    /// open the release page
+    @objc private func updateClicked() {
+        guard installingVersion == nil, let version = updateChecker.availableVersion else { return }
+        guard let url = updateChecker.downloadURL else {
+            openReleasePage()
+            return
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = L.updateConfirm(version)
+        alert.informativeText = L.updateConfirmText
+        alert.addButton(withTitle: L.install)
+        alert.addButton(withTitle: L.later)
+        alert.addButton(withTitle: L.whatsNew)
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            break
+        case .alertThirdButtonReturn:
+            openReleasePage()
+            return
+        default:
+            return
+        }
+
+        installingVersion = version
+        refresh()
+        Updater.install(from: url, version: version) { [weak self] reason in
+            guard let self else { return }
+            if let reason {
+                Log.write("Update to \(version) failed: \(reason)")
+                self.installingVersion = nil
+                self.refresh()
+                NSApp.activate(ignoringOtherApps: true)
+                let failed = NSAlert()
+                failed.alertStyle = .warning
+                failed.messageText = L.updateFailed(version, reason)
+                failed.addButton(withTitle: L.ok)
+                failed.addButton(withTitle: L.openReleasePage)
+                if failed.runModal() == .alertSecondButtonReturn {
+                    self.openReleasePage()
+                }
+                return
+            }
+            Log.write("Restarting with version \(version)")
+            self.quittingForUpdate = true
+            Updater.relaunch()
+            NSApp.terminate(nil)
+        }
+    }
+
     // MARK: Update hint
 
     /// Shows a notification once per new version
@@ -393,38 +454,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
               UserDefaults.standard.string(forKey: key) != version
         else { return }
         UserDefaults.standard.set(version, forKey: key)
-        notify(id: "update", L.updateNotification(version))
+        notify(id: "update", updateChecker.downloadURL != nil ? L.updateNotificationInstall(version) : L.updateNotification(version))
     }
 
-    /// Shows a notification; when notifications are not allowed, optionally
-    /// a dialog instead
-    private func notify(id: String, _ body: String, alertIfNotAllowed: Bool = false) {
+    /// Sends a notification to the Notification Center (no dialog: when
+    /// notifications are turned off, the menu still shows the state)
+    private func notify(id: String, _ body: String) {
         let center = UNUserNotificationCenter.current()
-        center.requestAuthorization(options: [.alert]) { granted, _ in
+        center.requestAuthorization(options: [.alert]) { granted, error in
             guard granted else {
-                Log.write("Notifications are not allowed")
-                if alertIfNotAllowed {
-                    DispatchQueue.main.async {
-                        NSApp.activate(ignoringOtherApps: true)
-                        let alert = NSAlert()
-                        alert.messageText = "Teams Busy Light"
-                        alert.informativeText = body
-                        alert.runModal()
-                    }
-                }
+                Log.write("Notifications are not allowed\(error.map { ": \($0.localizedDescription)" } ?? "")")
                 return
             }
             let content = UNMutableNotificationContent()
             content.title = "Teams Busy Light"
             content.body = body
-            center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
+            center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil)) { error in
+                if let error {
+                    Log.write("Cannot show the notification: \(error.localizedDescription)")
+                }
+            }
         }
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         if response.notification.request.identifier == "update" {
-            NSWorkspace.shared.open(UpdateChecker.releasesPage)
+            DispatchQueue.main.async { self.updateClicked() }
         }
         completionHandler()
     }
@@ -465,6 +521,32 @@ if let index = arguments.firstIndex(of: "--set-status") {
         exit(0)
     }
     dispatchMain()
+}
+
+// Installs an update without asking and without restarting (for tests;
+// the same checks as from the menu)
+if let index = arguments.firstIndex(of: "--install-update") {
+    guard index + 2 < arguments.count, let url = URL(string: arguments[index + 1]) else {
+        FileHandle.standardError.write(Data("Usage: TeamsBusyLight --install-update <zip url> <version>\n".utf8))
+        exit(2)
+    }
+    Updater.install(from: url, version: arguments[index + 2]) { reason in
+        if let reason {
+            FileHandle.standardError.write(Data("Failed: \(reason)\n".utf8))
+            exit(1)
+        }
+        print("Installed.")
+        exit(0)
+    }
+    dispatchMain()
+}
+
+// Started by the updater: wait until the old version has quit
+if let index = arguments.firstIndex(of: "--replaces"), index + 1 < arguments.count, let pid = pid_t(arguments[index + 1]) {
+    let deadline = Date().addingTimeInterval(15)
+    while kill(pid, 0) == 0 && Date() < deadline {
+        usleep(100_000)
+    }
 }
 
 // Only one instance (LaunchServices prevents a second one, but not a start

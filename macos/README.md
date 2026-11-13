@@ -57,7 +57,14 @@ The installer copies `Teams Busy Light.app` to `~/Applications` and starts it. T
   Assistant in your network; click Allow.
 
 The app is signed with the same certificate in every release, so the access is kept
-after updates. To update, run `install.sh` of the new release; the settings are kept.
+after updates. To update, choose **Install version …** in the menu when Teams Busy Light
+shows a new release, or run `install.sh` of the new release; the settings are kept either way.
+
+The update function installs a download only if it is signed with the same certificate as
+the installed app (the designated requirement `certificate leaf = H"…"`) and is exactly the
+offered version. macOS does not need to trust the certificate. Nothing is installed without
+your confirmation. Builds without the certificate (signed ad hoc, e.g. built from a clone)
+only open the release page.
 The script version (1.2.0 and older) is replaced, and its webhook URL and intervals are
 taken over.
 
@@ -91,7 +98,7 @@ Open **Settings…** in the menu (or double-click the app in `~/Applications`):
 | Send only in these networks | empty | Optional list of networks (e.g. `192.168.1.0/24, 10.0.0.0/8`); outside them nothing is sent, not even through an externally reachable webhook URL. **Add Current Network** fills in the network the Mac is in. Empty = send everywhere |
 | Ask when in a new network | on | While networks are set: asks whether to add a network the Mac is in that is not in the list yet ("Don't Add" is remembered) |
 | Start at login | on | Start the app after login |
-| Check for updates daily | on | Shows a menu entry and a notification when a new release is available; the update itself is downloaded from the release page |
+| Check for updates daily | on | Shows a menu entry and a notification when a new release is available; after confirmation the app downloads, checks and installs it |
 
 **Pause Sending** in the menu stops sending for 1 hour, 8 hours, 1 day or until **Resume
 Sending**; Home Assistant gets `offline` once. The pause is kept when the app restarts. The

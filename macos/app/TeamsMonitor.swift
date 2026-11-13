@@ -270,7 +270,7 @@ final class TeamsMonitor {
         let tellHomeAssistant = maySend
         pausedUntil = until
         SendPause.save(until)
-        Log.write(until == .distantFuture ? "Sending paused" : "Sending paused until \(until)")
+        Log.write(until == .distantFuture ? "Sending paused" : "Sending paused until \(Log.timestamp(until))")
         if tellHomeAssistant {
             Webhook.send(url: settings.webhookURL, status: "offline", inCall: false) { _ in }
         }

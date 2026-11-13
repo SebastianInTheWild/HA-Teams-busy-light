@@ -16,7 +16,8 @@ SRC="$(cd "$(dirname "$0")" && pwd)"
 BUILD="$SRC/build"
 APP="$BUILD/Teams Busy Light.app"
 MANIFEST="$SRC/../custom_components/teams_status/manifest.json"
-VERSION="$(plutil -extract version raw -o - "$MANIFEST" 2>/dev/null || echo 0.0.0)"
+# BUILD_VERSION overrides the version (e.g. to test the updater)
+VERSION="${BUILD_VERSION:-$(plutil -extract version raw -o - "$MANIFEST" 2>/dev/null || echo 0.0.0)}"
 TARGET="13.0"
 
 rm -rf "$BUILD"

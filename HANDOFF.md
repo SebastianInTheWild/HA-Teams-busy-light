@@ -241,14 +241,45 @@ Zertifikat und alle Installationen müssen einmal von Hand aktualisiert werden.
   beim ersten echten Release prüfen. Hinweis: Versionen ≤ 1.3.0 haben noch keinen Updater;
   das erste Update auf die Version mit Updater läuft noch per `Install.cmd`.
 
-### Updater macOS
-- ZIP laden, entpacken (`ditto -x -k`), mit `SecStaticCodeCheckValidity` gegen die
-  Designated Requirement der laufenden App prüfen (`certificate leaf = H"…"`); nur bei
-  Erfolg `~/Applications/Teams Busy Light.app` ersetzen (über temporären Namen, dann
-  Austausch) und per `open -n` neu starten, alte Instanz beendet sich (sendet `offline`).
-- Ad-hoc-signierte Builds (ohne Zertifikat) bieten keinen Update-Knopf.
-- Freigaben (Festplattenvollzugriff) bleiben, da gleiches Zertifikat – nach dem ersten
-  echten Update prüfen.
+### Updater macOS – umgesetzt und getestet (13.11.2026)
+
+- `macos/app/Updater.swift`: nur wenn die laufende App eine Designated Requirement mit
+  `certificate leaf = H"…"` hat (ad hoc → nur Release-Seite). Download (`URLSession`) in
+  `itemReplacementDirectory` (gleiches Volume), max. 50 MB, `zipinfo -1` gegen `../`/absolute
+  Pfade, `ditto -x -k`, `SecStaticCodeCheckValidityWithErrors` (alle Architekturen, strict,
+  nested) gegen die eigene DR, Bundle-ID und `CFBundleShortVersionString` == angebotene
+  Version, dann `renamex_np(RENAME_SWAP)` mit `~/Applications/Teams Busy Light.app`.
+  Neustart per `open -n … --args --replaces <pid>`; neue Instanz wartet (max. 15 s), bis die
+  alte beendet ist. Beim Beenden fürs Update kein `offline`.
+- Menü „Version x installieren …“ / Mitteilung → NSAlert Installieren/Später/Neuigkeiten;
+  Fehler → Alert mit Grund + „Release-Seite öffnen“, alte Version läuft weiter.
+- Test-Hilfen: `TEAMS_BUSY_LIGHT_UPDATE_API` (Fake-API, dann auch `http://` erlaubt; per
+  `open --env …`), `--install-update <url> <version>` (gleiche Prüfungen ohne Rückfrage/
+  Neustart), `BUILD_VERSION` in `build.sh`.
+- Getestet (macOS 27, echtes Zertifikat aus `~/teams-busy-light-signing`, Fake-Server):
+  abgelehnt ✅ ad hoc, fremdes Zertifikat mit gleichem CN, nachträglich geänderte Datei,
+  ZIP mit `../`, echte 1.3.1 als 1.3.2 angeboten, HTTP 404; installierte Version blieb.
+  Per Menü 1.3.0 → 1.3.1 ✅ in < 1 s, Festplattenvollzugriff blieb erhalten (Status sofort
+  gelesen), Einstellungen erhalten, kein `offline` an HA.
+- Nicht getestet: echter Download von GitHub (Redirect) – beim ersten Release prüfen.
+  Versionen ≤ 1.3.0 haben noch keinen Updater (erstes Update per `install.sh`).
+- Hinweis: Lokale Installation war bis 13.11. ad hoc signiert; mit dem Zertifikat musste
+  der Festplattenvollzugriff einmal neu erteilt werden.
+
+### Mac-Tests Netzfilter/Pause (13.11.2026)
+
+- ✅ fremdes Netz: nichts gesendet, kein `offline` beim Beenden; eigenes Netz sendet; VPN-Netz
+  (`utun`, 10.147.x) zählt als Heimnetz; „Aktuelles Netz hinzufügen“ → nur `192.168.11.0/24`.
+- ✅ NSAlert „Neues Netz“: „Hinzufügen“ (Liste, Senden läuft wieder), „Nicht hinzufügen“ +
+  „Nicht mehr fragen“ (`ignoredNetworks`, `askForNewNetworks = 0`). Kein Problem wie bei der
+  Windows-MessageBox.
+- ✅ Pause 1 Stunde (sofort `offline`), Fortsetzen (sofort gesendet), übersteht Neustart,
+  kein `offline` beim Beenden während der Pause, läuft von selbst ab.
+  „Bis ich fortsetze“ per Menü nicht im Log gesehen – kurz nachtesten.
+- Log zeigt die Pausenzeit jetzt in Ortszeit (vorher UTC, sah aus wie „bis jetzt“).
+- „Zugriff erteilt“ nur noch als Mitteilung (Wunsch des Users), kein Dialog mehr.
+  Auf diesem Mac sind Mitteilungen für die App gesperrt („Notifications are not allowed for
+  this application“, keine Abfrage erschienen) → Systemeinstellungen > Mitteilungen prüfen.
 
 ### Doku
 README (beide), CHANGELOG, Hinweis zum Environment `release` und zur Freigabe beim Release.

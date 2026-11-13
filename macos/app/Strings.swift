@@ -59,6 +59,31 @@ enum L {
         t("Teams Busy Light \(version) is available. Click to open the release page.",
           "Teams Busy Light \(version) ist verfügbar. Klicke, um die Release-Seite zu öffnen.")
     }
+    static func menuInstallUpdate(_ version: String) -> String {
+        t("Install Version \(version)…", "Version \(version) installieren …")
+    }
+    static func menuInstallingUpdate(_ version: String) -> String {
+        t("Installing Version \(version)…", "Version \(version) wird installiert …")
+    }
+    static func updateNotificationInstall(_ version: String) -> String {
+        t("Teams Busy Light \(version) is available. Click to install it.",
+          "Teams Busy Light \(version) ist verfügbar. Klicke, um es zu installieren.")
+    }
+    static func updateConfirm(_ version: String) -> String {
+        t("Install Teams Busy Light \(version) now?", "Teams Busy Light \(version) jetzt installieren?")
+    }
+    static let updateConfirmText = t(
+        "The app quits briefly and restarts with the new version. Your settings and the access to the Teams logs are kept.",
+        "Die App wird kurz beendet und startet mit der neuen Version neu. Deine Einstellungen und der Zugriff auf die Teams-Logs bleiben erhalten."
+    )
+    static let install = t("Install", "Installieren")
+    static let later = t("Later", "Später")
+    static let whatsNew = t("What's New", "Neuigkeiten")
+    static func updateFailed(_ version: String, _ reason: String) -> String {
+        t("Teams Busy Light \(version) could not be installed:\n\(reason)\n\nThe current version keeps running. You can download the new version from the release page.",
+          "Teams Busy Light \(version) konnte nicht installiert werden:\n\(reason)\n\nDie bisherige Version läuft weiter. Die neue Version kannst du von der Release-Seite laden.")
+    }
+    static let openReleasePage = t("Open Release Page", "Release-Seite öffnen")
     static let checkForUpdates = t("Check for updates daily", "Täglich nach Updates suchen")
 
     // Settings

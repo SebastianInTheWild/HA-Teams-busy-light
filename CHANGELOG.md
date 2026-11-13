@@ -6,6 +6,8 @@
 * macOS and Windows: pause sending from the menu (1 hour, 8 hours, 1 day or until resumed); Home Assistant gets `offline` once
 * macOS and Windows: the settings window shows the installed version
 * Windows: install updates from the app ("Install version …" in the menu or the notification): after confirmation it downloads the release, checks the signature of all files against the project's own certificate and installs it; settings are kept and Home Assistant gets no `offline` in between
+* macOS: install updates from the app ("Install version …" in the menu or the notification): after confirmation it downloads the release, installs it only if it is signed with the same certificate as the installed app, and restarts; settings and Full Disk Access are kept, Home Assistant gets no `offline` in between
+* macOS: "Access granted" goes to the Notification Center only (no dialog)
 * Windows: the download contains a catalog of all its files, signed with the project's own certificate
 
 ## 1.3.0

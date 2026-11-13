@@ -144,6 +144,11 @@ enum Log {
         return formatter
     }()
 
+    /// Local time as in the log, e.g. "2026-11-13 15:24:37"
+    static func timestamp(_ date: Date) -> String {
+        formatter.string(from: date)
+    }
+
     static func write(_ message: String) {
         let line = "\(formatter.string(from: Date())) \(message)\n"
         let fileManager = FileManager.default

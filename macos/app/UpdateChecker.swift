@@ -1,13 +1,19 @@
 import Foundation
 
-/// Checks the latest GitHub release once a day. Only shows a hint; the update
-/// itself is downloaded from the release page.
+/// Checks the latest GitHub release once a day. A signed app can install the
+/// update itself (see Updater), otherwise the release page is opened.
 final class UpdateChecker {
     static let releasesPage = URL(string: "https://github.com/SebastianInTheWild/HA-Teams-busy-light/releases/latest")!
-    private static let api = URL(string: "https://api.github.com/repos/SebastianInTheWild/HA-Teams-busy-light/releases/latest")!
+    /// TEAMS_BUSY_LIGHT_UPDATE_API replaces the GitHub API for tests (e.g. a
+    /// local server); only the signature check protects the update anyway
+    private static let testAPI = ProcessInfo.processInfo.environment["TEAMS_BUSY_LIGHT_UPDATE_API"].flatMap(URL.init(string:))
+    private static let api = testAPI
+        ?? URL(string: "https://api.github.com/repos/SebastianInTheWild/HA-Teams-busy-light/releases/latest")!
 
     /// Newer version than the installed one, e.g. "1.3.0"
     private(set) var availableVersion: String?
+    /// Download of the macOS app of that version, if it can be installed from the app
+    private(set) var downloadURL: URL?
     var onChange: (() -> Void)?
 
     private var timer: Timer?
@@ -18,6 +24,7 @@ final class UpdateChecker {
         timer = nil
         guard enabled, currentVersion != "0.0.0" else {
             availableVersion = nil
+            downloadURL = nil
             onChange?()
             return
         }
@@ -36,13 +43,21 @@ final class UpdateChecker {
                   let tag = json["tag_name"] as? String
             else { return }
             let latest = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
+            let assets = json["assets"] as? [[String: Any]] ?? []
+            let download = assets.first { $0["name"] as? String == Updater.assetName }?["browser_download_url"] as? String
+            var downloadURL = download.flatMap(URL.init(string:))
+            if (downloadURL?.scheme != "https" && Self.testAPI == nil) || !Updater.isSupported {
+                downloadURL = nil
+            }
             DispatchQueue.main.async {
                 let newer = Self.isNewer(latest, than: self.currentVersion) ? latest : nil
-                if newer != self.availableVersion {
+                let url = newer == nil ? nil : downloadURL
+                if newer != self.availableVersion || url != self.downloadURL {
                     if let newer {
-                        Log.write("Update available: \(newer)")
+                        Log.write("Update available: \(newer)\(url != nil ? " (can be installed from the app)" : "")")
                     }
                     self.availableVersion = newer
+                    self.downloadURL = url
                     self.onChange?()
                 }
             }
