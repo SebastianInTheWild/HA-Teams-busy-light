@@ -31,6 +31,7 @@ $ReleasesApi = 'https://api.github.com/repos/SebastianInTheWild/HA-Teams-busy-li
 # Updates are installed only if the catalog is signed with the certificate
 # with this SHA-256 fingerprint. Empty = no update button, only the hint.
 $ReleaseCatalogName = 'TeamsBusyLight.cat'
+$ReleaseAssetName = 'TeamsBusyLight-Windows.zip'
 $SigningCertificateSha256 = 'C490C7763D8BB1C4098F00D45BB87C7BC45A41282686F89D32C941EBDBABF48F'
 
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
@@ -401,6 +402,72 @@ function Test-TeamsReleaseSignature {
         return "files do not match the catalog: $($Differences -join ', ')"
     }
     return $null
+}
+
+# Unpacks a ZIP file; refuses entries outside the target folder and
+# archives that unpack to more than $MaxBytes
+function Expand-TeamsZip {
+    param(
+        [Parameter(Mandatory)][string]$ZipPath,
+        [Parameter(Mandatory)][string]$Destination,
+        [long]$MaxBytes = 50MB
+    )
+
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $Root = [System.IO.Path]::GetFullPath($Destination).TrimEnd('\') + '\'
+    $Archive = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
+    try {
+        $Total = 0
+        foreach ($Entry in $Archive.Entries) {
+            $Total += $Entry.Length
+            if ($Total -gt $MaxBytes) {
+                throw 'The archive is too large.'
+            }
+            $Target = [System.IO.Path]::GetFullPath((Join-Path $Root $Entry.FullName))
+            if (-not $Target.StartsWith($Root, [System.StringComparison]::OrdinalIgnoreCase)) {
+                throw "The archive contains an invalid path: $($Entry.FullName)"
+            }
+            if ($Entry.FullName.EndsWith('/') -or $Entry.FullName.EndsWith('\')) {
+                New-Item -Path $Target -ItemType Directory -Force | Out-Null
+                continue
+            }
+            New-Item -Path (Split-Path $Target) -ItemType Directory -Force | Out-Null
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($Entry, $Target, $false)
+        }
+    }
+    finally {
+        $Archive.Dispose()
+    }
+}
+
+# Message box in front of other windows: an invisible topmost owner window,
+# because a tray app has no window of its own. (MessageBoxOptions.
+# DefaultDesktopOnly must not be used: in the tray app the box returned "No"
+# at once without being shown.)
+function Show-TeamsMessageBox {
+    param(
+        [string]$Text,
+        [string]$Caption = $AppName,
+        [System.Windows.Forms.MessageBoxButtons]$Buttons = [System.Windows.Forms.MessageBoxButtons]::OK,
+        [System.Windows.Forms.MessageBoxIcon]$Icon = [System.Windows.Forms.MessageBoxIcon]::Information
+    )
+
+    $Owner = New-Object System.Windows.Forms.Form
+    $Owner.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
+    $Owner.ShowInTaskbar = $false
+    $Owner.StartPosition = [System.Windows.Forms.FormStartPosition]::Manual
+    $Owner.Location = New-Object System.Drawing.Point(-32000, -32000)
+    $Owner.Size = New-Object System.Drawing.Size(1, 1)
+    $Owner.TopMost = $true
+    try {
+        $Owner.Show()
+        $Owner.Activate()
+        return [System.Windows.Forms.MessageBox]::Show($Owner, $Text, $Caption, $Buttons, $Icon)
+    }
+    finally {
+        $Owner.Dispose()
+    }
 }
 
 function Get-TeamsAutostart {

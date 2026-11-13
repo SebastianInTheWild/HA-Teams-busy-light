@@ -5,7 +5,8 @@
 * macOS and Windows: optional "Send only in these networks" (e.g. `192.168.1.0/24`): outside these networks nothing is sent to Home Assistant, even if the webhook URL is reachable from outside; asks whether to add a new network (can be turned off)
 * macOS and Windows: pause sending from the menu (1 hour, 8 hours, 1 day or until resumed); Home Assistant gets `offline` once
 * macOS and Windows: the settings window shows the installed version
-* Windows: the download contains a catalog of all its files, signed with the project's own certificate (basis for installing updates from the app)
+* Windows: install updates from the app ("Install version …" in the menu or the notification): after confirmation it downloads the release, checks the signature of all files against the project's own certificate and installs it; settings are kept and Home Assistant gets no `offline` in between
+* Windows: the download contains a catalog of all its files, signed with the project's own certificate
 
 ## 1.3.0
 

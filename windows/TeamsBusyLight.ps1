@@ -92,6 +92,11 @@ $State = @{
     LastNetworkCheck = [datetime]::MinValue
     AskingNetwork = $false
     PausedUntil = Get-TeamsPause
+    UpdateAssetUrl = $null
+    UpdateDownload = $null
+    UpdateInstaller = $null
+    UpdateDir = $null
+    Updating = $false
 }
 $AppVersion = Get-TeamsVersion
 
@@ -248,9 +253,129 @@ function Update-TrayDisplay {
     $Tray.Text = $Tooltip
 }
 
-# --- Update hint -----------------------------------------------------------
+# --- Updates ---------------------------------------------------------------
+# Checks the latest GitHub release once a day. If its Windows download can be
+# checked (pinned certificate), the menu offers to install it; otherwise it
+# only links to the release page. Nothing is installed without confirmation.
 
-# Checks the latest GitHub release once a day; only shows a hint
+function Set-TeamsUpdateItem {
+    if ($State.Updating) {
+        $UpdateItem.Text = $Messages.MenuUpdating -f $State.UpdateVersion
+        $UpdateItem.Enabled = $false
+    }
+    elseif ($State.UpdateAssetUrl) {
+        $UpdateItem.Text = $Messages.MenuInstallUpdate -f $State.UpdateVersion
+        $UpdateItem.Enabled = $true
+    }
+    else {
+        $UpdateItem.Text = $Messages.MenuUpdate -f $State.UpdateVersion
+        $UpdateItem.Enabled = $true
+    }
+    $UpdateItem.Visible = [bool]$State.UpdateVersion
+}
+
+function Invoke-TeamsUpdateAction {
+    if (-not $State.UpdateVersion -or $State.Updating) {
+        return
+    }
+    if (-not $State.UpdateAssetUrl) {
+        Start-Process $ReleasesPage
+        return
+    }
+    $Answer = Show-TeamsMessageBox -Text ($Messages.UpdateConfirm -f $State.UpdateVersion) -Caption $Messages.AppName `
+        -Buttons YesNo -Icon Question
+    if ($Answer -ne [System.Windows.Forms.DialogResult]::Yes) {
+        return
+    }
+    Write-TeamsLog "Downloading update $($State.UpdateVersion)"
+    $State.Updating = $true
+    $State.UpdateDownload = $UpdateHttp.GetByteArrayAsync($State.UpdateAssetUrl)
+    Set-TeamsUpdateItem
+}
+
+function Stop-TeamsUpdate {
+    param([string]$Reason)
+
+    Write-TeamsLog "Update to $($State.UpdateVersion) failed: $Reason"
+    $State.Updating = $false
+    $State.UpdateDownload = $null
+    $State.UpdateInstaller = $null
+    if ($State.UpdateDir) {
+        Remove-Item -LiteralPath $State.UpdateDir -Recurse -Force -ErrorAction SilentlyContinue
+        $State.UpdateDir = $null
+    }
+    Set-TeamsUpdateItem
+    [void](Show-TeamsMessageBox -Text ($Messages.UpdateFailed -f $State.UpdateVersion, $Reason) -Caption $Messages.AppName -Icon Warning)
+}
+
+# Unpacks and checks the download, then starts its installer. The installer
+# stops this instance and starts the new version.
+function Install-TeamsUpdate {
+    param([byte[]]$Bytes)
+
+    $State.UpdateDir = Join-Path ([System.IO.Path]::GetTempPath()) ('TeamsBusyLight-Update-{0}' -f [guid]::NewGuid())
+    New-Item -Path $State.UpdateDir -ItemType Directory | Out-Null
+    $ZipPath = Join-Path $State.UpdateDir $ReleaseAssetName
+    [System.IO.File]::WriteAllBytes($ZipPath, $Bytes)
+    $FilesDir = Join-Path $State.UpdateDir 'files'
+    Expand-TeamsZip -ZipPath $ZipPath -Destination $FilesDir
+    $SourceDir = Join-Path $FilesDir 'TeamsBusyLight-Windows'
+    if (-not (Test-Path (Join-Path $SourceDir 'Install.ps1'))) {
+        throw 'unexpected content of the download'
+    }
+    $Problem = Test-TeamsReleaseSignature -Path $SourceDir
+    if ($Problem) {
+        throw "signature check failed: $Problem"
+    }
+    # A correctly signed older release must not be installed instead
+    $DownloadVersion = Get-TeamsVersion -Root $SourceDir
+    if ($DownloadVersion -ne $State.UpdateVersion) {
+        throw "the download contains version $DownloadVersion"
+    }
+    Get-ChildItem -LiteralPath $SourceDir -Recurse -File | Unblock-File
+    Write-TeamsLog "Update $DownloadVersion checked, starting the installer"
+    # Working directory outside the program folder, which the installer replaces
+    $State.UpdateInstaller = Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -WorkingDirectory $SourceDir -PassThru -ArgumentList @(
+        '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden',
+        '-File', ('"{0}"' -f (Join-Path $SourceDir 'Install.ps1')), '-Quiet')
+}
+
+function Complete-TeamsUpdate {
+    if (-not $State.Updating) {
+        return
+    }
+    $Task = $State.UpdateDownload
+    if ($Task) {
+        if (-not $Task.IsCompleted) {
+            return
+        }
+        $State.UpdateDownload = $null
+        if ($Task.Status -ne [System.Threading.Tasks.TaskStatus]::RanToCompletion) {
+            $Reason = if ($Task.Exception) { $Task.Exception.GetBaseException().Message } else { 'download cancelled' }
+            Stop-TeamsUpdate "download failed: $Reason"
+            return
+        }
+        try {
+            Install-TeamsUpdate $Task.Result
+        }
+        catch {
+            Stop-TeamsUpdate $_.Exception.Message
+        }
+        return
+    }
+    # Still running after the installer has finished: it failed
+    if ($State.UpdateInstaller -and $State.UpdateInstaller.HasExited) {
+        Stop-TeamsUpdate $Messages.UpdateInstallerFailed
+    }
+}
+
+# Removes update folders of earlier updates
+function Clear-TeamsUpdateFolders {
+    Get-ChildItem -Path ([System.IO.Path]::GetTempPath()) -Filter 'TeamsBusyLight-Update-*' -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.LastWriteTime -lt (Get-Date).AddMinutes(-10) } |
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 function Invoke-TeamsUpdateCheck {
     $Task = $State.UpdateTask
     if ($Task) {
@@ -260,13 +385,22 @@ function Invoke-TeamsUpdateCheck {
         $State.UpdateTask = $null
         if ($Task.Status -eq [System.Threading.Tasks.TaskStatus]::RanToCompletion) {
             try {
-                $Latest = ([string]($Task.Result | ConvertFrom-Json).tag_name).TrimStart('v')
-                if ($Latest -and (Test-TeamsNewerVersion $Latest $AppVersion) -and $Latest -ne $State.UpdateVersion) {
+                $Release = $Task.Result | ConvertFrom-Json
+                $Latest = ([string]$Release.tag_name).TrimStart('v')
+                if ($Latest -and (Test-TeamsNewerVersion $Latest $AppVersion) -and $Latest -ne $State.UpdateVersion -and -not $State.Updating) {
                     $State.UpdateVersion = $Latest
-                    Write-TeamsLog "Update available: $Latest"
-                    $UpdateItem.Text = $Messages.MenuUpdate -f $Latest
-                    $UpdateItem.Visible = $true
-                    $Tray.ShowBalloonTip(10000, $Messages.AppName, ($Messages.UpdateBalloon -f $Latest), [System.Windows.Forms.ToolTipIcon]::Info)
+                    # Install from the app only if the download can be checked
+                    $Asset = @($Release.assets | Where-Object { $_.name -eq $ReleaseAssetName }) | Select-Object -First 1
+                    $State.UpdateAssetUrl = if ($SigningCertificateSha256 -and $Asset -and ([string]$Asset.browser_download_url).StartsWith('https://')) {
+                        [string]$Asset.browser_download_url
+                    }
+                    else {
+                        $null
+                    }
+                    Write-TeamsLog "Update available: $Latest$(if ($State.UpdateAssetUrl) { ' (can be installed from the app)' })"
+                    Set-TeamsUpdateItem
+                    $Balloon = if ($State.UpdateAssetUrl) { $Messages.UpdateBalloonInstall } else { $Messages.UpdateBalloon }
+                    $Tray.ShowBalloonTip(10000, $Messages.AppName, ($Balloon -f $Latest), [System.Windows.Forms.ToolTipIcon]::Info)
                 }
             }
             catch {
@@ -441,26 +575,9 @@ function Request-TeamsNewNetwork {
         return
     }
     $State.AskingNetwork = $true
-    # Invisible topmost owner, so the question comes to the front even while
-    # another app is active. (MessageBoxOptions.DefaultDesktopOnly must not be
-    # used: in the tray app it returned "No" at once without showing the box.)
-    $Owner = New-Object System.Windows.Forms.Form
-    $Owner.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
-    $Owner.ShowInTaskbar = $false
-    $Owner.StartPosition = [System.Windows.Forms.FormStartPosition]::Manual
-    $Owner.Location = New-Object System.Drawing.Point(-32000, -32000)
-    $Owner.Size = New-Object System.Drawing.Size(1, 1)
-    $Owner.TopMost = $true
     try {
-        $Owner.Show()
-        $Owner.Activate()
-        $Answer = [System.Windows.Forms.MessageBox]::Show(
-            $Owner,
-            ($Messages.NewNetworkText -f $Network),
-            $Messages.AppName,
-            [System.Windows.Forms.MessageBoxButtons]::YesNoCancel,
-            [System.Windows.Forms.MessageBoxIcon]::Question
-        )
+        $Answer = Show-TeamsMessageBox -Text ($Messages.NewNetworkText -f $Network) -Caption $Messages.AppName `
+            -Buttons YesNoCancel -Icon Question
         switch ($Answer) {
             'Yes' {
                 $Config.HomeNetworks = Add-TeamsNetworkText $Config.HomeNetworks @($Network)
@@ -479,7 +596,6 @@ function Request-TeamsNewNetwork {
         $State.LastNetworkCheck = [datetime]::MinValue
     }
     finally {
-        $Owner.Dispose()
         $State.AskingNetwork = $false
     }
 }
@@ -500,8 +616,9 @@ function Invoke-TeamsSend {
 
 function Exit-TeamsBusyLight {
     $Timer.Stop()
-    # Tell Home Assistant right away instead of waiting for the timeout
-    if ($Config.WebhookUrl -and -not $State.PausedUntil -and (Test-TeamsHomeNetwork $Config.HomeNetworks)) {
+    # Tell Home Assistant right away instead of waiting for the timeout; not
+    # when stopped for an update, the new version sends right after starting
+    if ($Config.WebhookUrl -and -not $State.PausedUntil -and -not $State.Updating -and (Test-TeamsHomeNetwork $Config.HomeNetworks)) {
         [void](Send-TeamsStatus -WebhookUrl $Config.WebhookUrl -Status 'offline' -Activity 'not_in_call' -TimeoutSeconds 3)
     }
     $Tray.Visible = $false
@@ -532,6 +649,7 @@ $Timer.Add_Tick({
         Request-TeamsNewNetwork
         Invoke-TeamsSend
         Invoke-TeamsUpdateCheck
+        Complete-TeamsUpdate
     }
     catch {
         Write-TeamsLog $_.Exception.Message
@@ -546,8 +664,8 @@ $LogItem.Add_Click({
 })
 $ExitItem.Add_Click({ Exit-TeamsBusyLight })
 $ResumeItem.Add_Click({ Resume-TeamsSending })
-$UpdateItem.Add_Click({ Start-Process $ReleasesPage })
-$Tray.Add_BalloonTipClicked({ if ($State.UpdateVersion) { Start-Process $ReleasesPage } })
+$UpdateItem.Add_Click({ Invoke-TeamsUpdateAction })
+$Tray.Add_BalloonTipClicked({ Invoke-TeamsUpdateAction })
 $Tray.Add_DoubleClick({ Open-TeamsSettings })
 # Show the menu on a left click as well
 $Tray.Add_MouseUp({
@@ -559,6 +677,7 @@ $Tray.Add_MouseUp({
 })
 
 Write-TeamsLog ($Messages.LogStarted -f $env:COMPUTERNAME, $env:USERNAME)
+Clear-TeamsUpdateFolders
 Update-TrayDisplay
 $Tray.Visible = $true
 $Timer.Start()

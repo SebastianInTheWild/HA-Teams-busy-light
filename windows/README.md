@@ -66,7 +66,9 @@ then **Install**. It
 Every Windows user installs Teams Busy Light for themselves, with their own integration
 entry and webhook URL.
 
-To update, run `Install.cmd` of the new release; the settings are kept.
+To update, choose **Install version …** in the menu when Teams Busy Light shows a new release, or run `Install.cmd` of the new release; the settings are kept either way.
+
+The update function installs a download only if it is signed with the project's own certificate and none of its files was changed, added or removed (the release contains a signed catalog `TeamsBusyLight.cat` with the hashes of all files). Windows does not need to trust the certificate; the app checks it against the fingerprint it ships with. Nothing is installed without your confirmation, and steps that need administrator rights (hosts file, removing the old service) stay with `Install.cmd`.
 
 ### Hosts file entry (optional)
 
@@ -111,7 +113,7 @@ Open **Settings…** in the menu of the tray icon or **Teams Busy Light** in the
 | Send only in these networks | empty | Optional list of networks (e.g. `192.168.1.0/24, 10.0.0.0/8`); outside them nothing is sent, not even through an externally reachable webhook URL. **Add current network** fills in the network the PC is in. Empty = send everywhere |
 | Ask whether to add a new network | on | While networks are set: asks whether to add a network the PC is in that is not in the list yet ("No" is remembered, "Cancel" stops asking) |
 | Start when I sign in to Windows | on | Start the app at sign-in |
-| Check for updates daily | on | Shows a menu entry and a notification when a new release is available; the update itself is downloaded from the release page |
+| Check for updates daily | on | Shows a menu entry and a notification when a new release is available; after confirmation the app downloads, checks and installs it |
 
 **Pause sending** in the menu of the tray icon stops sending for 1 hour, 8 hours, 1 day or
 until **Resume sending**; Home Assistant gets `offline` once. The pause is kept when the app

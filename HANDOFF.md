@@ -218,14 +218,28 @@ Offen (User): Backup der Windows-PFX
 an einem sicheren Ort (Passwortmanager); geht sie verloren, braucht es ein neues
 Zertifikat und alle Installationen müssen einmal von Hand aktualisiert werden.
 
-### Updater Windows
-- Update-Hinweis (Menü + Balloon) → Frage „Version x installieren?“ → Asset
-  `TeamsBusyLight-Windows.zip` aus `releases/latest` nach `%TEMP%\TeamsBusyLight-Update-<guid>`
-  laden und entpacken, Signatur jeder `.ps1` prüfen (siehe oben), dann `Install.ps1 -Quiet`
-  starten (neuer Parameter: kein Dialog, übernimmt vorhandene Einstellungen, keine Admin-Schritte)
-  und die laufende App beenden (der Installer macht `Stop-TeamsBusyLight` schon) → Installer
-  startet die neue Version. Fehler → Meldung + Log, alte Version läuft weiter.
-- Mark-of-the-Web: per HttpClient geladene Dateien bekommen keins; trotzdem `Unblock-File`.
+### Updater Windows – umgesetzt und getestet (13.11.2026)
+
+- `TeamsBusyLight.ps1`: Update-Check merkt sich die Asset-URL von `TeamsBusyLight-Windows.zip`
+  (nur `https://` und nur mit gepinntem Fingerabdruck), Menü/Balloon „Version x
+  installieren …“ → Rückfrage (Ja/Nein, `Show-TeamsMessageBox`) → `GetByteArrayAsync` (Timer
+  pollt) → `Install-TeamsUpdate`: `%TEMP%\TeamsBusyLight-Update-<guid>`, `Expand-TeamsZip`
+  (kein Pfad außerhalb, max. 50 MB), `Test-TeamsReleaseSignature`, `version.txt` muss genau
+  der angebotenen Version entsprechen (kein Unterschieben älterer signierter Releases),
+  `Unblock-File`, startet `Install.ps1 -Quiet` mit **Arbeitsverzeichnis = Update-Ordner**
+  (sonst blockiert das geerbte cwd `ProgramDir` dessen Löschung). Beim Beenden fürs Update
+  kein `offline`. Endet der Installer und die App läuft noch → Fehlermeldung. Fehler →
+  Meldung + Log, Ordner weg, alte Version läuft. Alte Update-Ordner (>10 min) beim Start weg.
+- `Install.ps1 -Quiet`: nur als Update (sonst Fehler), kein Dialog, Einstellungen/Autostart
+  bleiben, keine Admin-Schritte, keine Abschlussmeldung, Log „Updated to version x“.
+- `Show-TeamsMessageBox` (Common.ps1) ersetzt das TopMost-Owner-Fenster der Netz-Frage.
+- Test auf dem PC mit lokalem Fake-GitHub (127.0.0.1, installierte Kopie umgebogen), ZIP mit
+  echtem Zertifikat signiert: 1.3.0 → 1.3.1 ✅ in 2 s, Einstellungen erhalten, HA ohne
+  `offline`. Manipulierte `Launcher.cs` → abgelehnt ✅. Echtes 1.3.1 als „1.3.2“ angeboten →
+  abgelehnt ✅. `Install.ps1 -Quiet` aus dem Repo ✅. Danach saubere Installation (1.3.0).
+- Nicht getestet: echter Download von GitHub (Redirect auf objects.githubusercontent.com) –
+  beim ersten echten Release prüfen. Hinweis: Versionen ≤ 1.3.0 haben noch keinen Updater;
+  das erste Update auf die Version mit Updater läuft noch per `Install.cmd`.
 
 ### Updater macOS
 - ZIP laden, entpacken (`ditto -x -k`), mit `SecStaticCodeCheckValidity` gegen die

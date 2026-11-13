@@ -10,14 +10,26 @@
     optional hosts file entry and when the Windows service of earlier versions
     is removed.
     Run again to update; the settings are kept.
+.PARAMETER Quiet
+    Update of an existing installation started by the app's update function:
+    no settings window, the settings and autostart are kept, no steps that
+    need administrator rights, no completion message.
 #>
+param(
+    [switch]$Quiet
+)
+
 . (Join-Path $PSScriptRoot 'Common.ps1')
 $Messages = Get-TeamsMessages
 
 # WinForms needs a single-threaded apartment
 if ($Host.Runspace.ApartmentState -ne 'STA') {
     $PowerShellPath = (Get-Process -Id $PID).Path
-    Start-Process -FilePath $PowerShellPath -ArgumentList @('-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', ('"{0}"' -f $PSCommandPath)) -Wait
+    $Arguments = @('-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', ('"{0}"' -f $PSCommandPath))
+    if ($Quiet) {
+        $Arguments += '-Quiet'
+    }
+    Start-Process -FilePath $PowerShellPath -ArgumentList $Arguments -Wait
     exit
 }
 
@@ -27,6 +39,9 @@ Add-Type -AssemblyName System.Windows.Forms
 
 # The installer runs without a console, so show errors in a window
 trap {
+    if ($Quiet) {
+        Write-TeamsLog "Installing the update failed: $($_.Exception.Message)"
+    }
     [void][System.Windows.Forms.MessageBox]::Show($_.Exception.Message, $Messages.InstallTitle, [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
     exit 1
 }
@@ -72,9 +87,20 @@ if ($Version -eq '0.0.0' -and (Test-Path $Manifest)) {
     $Version = ([System.IO.File]::ReadAllText($Manifest) | ConvertFrom-Json).version
 }
 
-$Result = Show-TeamsSettingsDialog -Settings $Current -Autostart $Autostart -Install -LegacyFound $LegacyFound -Version $Version
-if (-not $Result) {
-    exit
+if ($Quiet) {
+    if (-not $IsUpdate) {
+        throw 'Teams Busy Light is not installed yet; run Install.cmd.'
+    }
+    # Steps with administrator rights (hosts file, old service) stay with
+    # the normal installer
+    $LegacyFound = $false
+    $Result = [pscustomobject]@{ Settings = $Current; Autostart = $Autostart; AddHosts = $false }
+}
+else {
+    $Result = Show-TeamsSettingsDialog -Settings $Current -Autostart $Autostart -Install -LegacyFound $LegacyFound -Version $Version
+    if (-not $Result) {
+        exit
+    }
 }
 
 # Replace the program files of a running instance
@@ -156,6 +182,11 @@ if ($AdminArguments) {
 }
 
 Start-Process -FilePath $LauncherPath
+
+if ($Quiet) {
+    Write-TeamsLog "Updated to version $Version"
+    exit
+}
 
 [void][System.Windows.Forms.MessageBox]::Show(
     $Messages.InstallComplete,
