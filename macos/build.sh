@@ -79,8 +79,12 @@ rm -rf "$ICONSET"
 
 # Signing
 KEYCHAIN=""
+SEARCH_LIST=()
 cleanup() {
     if [ -n "$KEYCHAIN" ]; then
+        if [ ${#SEARCH_LIST[@]} -gt 0 ]; then
+            security list-keychains -d user -s "${SEARCH_LIST[@]}" 2>/dev/null || true
+        fi
         security delete-keychain "$KEYCHAIN" 2>/dev/null || true
     fi
 }
@@ -99,8 +103,21 @@ if [ -n "${MACOS_SIGNING_P12:-}" ]; then
     security import "$BUILD/signing.p12" -k "$KEYCHAIN" -P "${MACOS_SIGNING_PASSWORD:-}" -T /usr/bin/codesign >/dev/null
     rm -f "$BUILD/signing.p12"
     security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
-    # The self-signed certificate is not trusted, so it is selected by its SHA-1
-    IDENTITY="$(security find-certificate -a -Z "$KEYCHAIN" | awk '/^SHA-1 hash:/ { print $3; exit }')"
+    # codesign only finds the private key in keychains of the search list
+    while IFS= read -r Entry; do
+        Entry="${Entry#"${Entry%%[![:space:]]*}"}"
+        SEARCH_LIST+=("${Entry//\"/}")
+    done < <(security list-keychains -d user)
+    security list-keychains -d user -s "$KEYCHAIN" ${SEARCH_LIST[@]+"${SEARCH_LIST[@]}"}
+    # The self-signed certificate is not trusted, so it is selected by its
+    # SHA-1; find-identity only lists certificates with their private key
+    IDENTITY="$(security find-identity -p codesigning "$KEYCHAIN" | awk '$1 ~ /^[0-9]+\)$/ && length($2) == 40 { print $2; exit }')"
+    if [ -z "$IDENTITY" ]; then
+        echo "MACOS_SIGNING_P12 contains no certificate with its private key" >&2
+        security find-identity -p codesigning "$KEYCHAIN" >&2
+        exit 1
+    fi
+    echo "Signing with certificate $IDENTITY"
     SIGN_OPTIONS=(--keychain "$KEYCHAIN")
 fi
 
