@@ -80,7 +80,33 @@ Offen:
 - Echtes Zertifikat erzeugen und Secrets setzen (User).
 - CI-Jobs laufen erst nach dem Push.
 
-## Nächstes Feature: Musik am Rechner während Anrufen pausieren (Wunsch des Users)
+## Nächster Schritt: Windows-Tests (auf dem Windows-PC)
+
+macOS ist fertig und vom User getestet. Auf Windows noch ungetestet: UAC-Pfade,
+Update vom alten Dienst, Deinstallation. Testplan (Ergebnisse hier eintragen):
+
+1. **Altinstallation vorbereiten:** Ordner `windows` von Tag `v1.2.0`
+   (`git worktree add ../tbl-1.2.0 v1.2.0`) mit dessen `Install.cmd` installieren → Dienst
+   `Microsoft Teams Status Monitor` läuft, `C:\Scripts\TeamsStatus\Settings.ps1` enthält
+   die URL.
+2. **Update vom Dienst:** `windows\Install.cmd` aus `tray-apps` (ohne Admin starten).
+   Erwartet: URL vorausgefüllt, Hinweis auf Entfernen des Dienstes, eine UAC-Abfrage,
+   danach Dienst und `C:\Scripts\TeamsStatus` weg, Tray-App läuft, Sensor in HA aktuell.
+3. **Hosts-Eintrag:** Installer erneut, Haken „Hosts-Datei“ setzen → UAC → Zeile mit
+   `# Teams Busy Light` in `%windir%\System32\drivers\etc\hosts`.
+4. **UAC ablehnen:** Installer mit Hosts-Haken, UAC mit „Nein“ → Warnung
+   „nicht ausgeführt: Hosts-Eintrag“, Installation trotzdem vollständig.
+5. **Deinstallation über „Installierte Apps“:** Abfrage, Hosts-Frage (Ja → UAC → Zeile
+   weg), danach weg: Autostart (`HKCU\...\Run`), Startmenü, Eintrag in „Installierte
+   Apps“, `%LOCALAPPDATA%\Programs\TeamsBusyLight`, `%LOCALAPPDATA%\TeamsBusyLight`;
+   HA bekommt `offline`.
+6. **Deinstallation mit `Uninstall.ps1`** aus dem Download-Ordner (gleiche Prüfungen),
+   dabei einmal mit noch vorhandenem Altdienst (Frage nach dessen Entfernung).
+7. **Release-Layout:** Ordner `windows` + `version.txt` (z. B. `1.2.0`) kopieren und
+   daraus installieren → Update-Hinweis nur bei neuerer Version.
+8. Optional Windows 10 (README nennt 10 oder 11, getestet nur 11).
+
+## Später: Musik am Rechner während Anrufen pausieren (Wunsch des Users, zurückgestellt am 13.11.2026)
 
 Läuft am Rechner Musik (Spotify, Apple Music, Browser …), wird sie bei einem Anruf pausiert
 und danach fortgesetzt, aber nur, wenn die App sie selbst pausiert hat. Schalter
