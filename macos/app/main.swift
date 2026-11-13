@@ -14,7 +14,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var settingsWindow: NSWindow?
     private var signalSource: DispatchSourceSignal?
     private var accessHintShown = false
-    private var accessWasDenied = false
+    /// Kept in the user defaults: macOS may restart the app when the access
+    /// is granted, and the new instance still confirms it
+    private var accessWasDenied: Bool {
+        get { UserDefaults.standard.bool(forKey: "logAccessDenied") }
+        set { UserDefaults.standard.set(newValue, forKey: "logAccessDenied") }
+    }
     private var settingsModel: SettingsModel?
 
     private let statusLine = NSMenuItem()
@@ -148,11 +153,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
         accessItem.isHidden = !monitor.logAccessDenied
         if monitor.logAccessDenied {
-            accessWasDenied = true
+            if !accessWasDenied {
+                accessWasDenied = true
+            }
         } else if accessWasDenied && monitor.status != nil {
             accessWasDenied = false
             Log.write("Access to the Teams logs granted")
-            notify(id: "access", L.accessGranted)
+            notify(id: "access", L.accessGranted, alertIfNotAllowed: true)
         }
         settingsModel?.logAccess = Teams.isRunning ? !monitor.logAccessDenied : nil
         if monitor.logAccessDenied && !accessHintShown {
@@ -311,10 +318,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         notify(id: "update", L.updateNotification(version))
     }
 
-    private func notify(id: String, _ body: String) {
+    /// Shows a notification; when notifications are not allowed, optionally
+    /// a dialog instead
+    private func notify(id: String, _ body: String, alertIfNotAllowed: Bool = false) {
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert]) { granted, _ in
-            guard granted else { return }
+            guard granted else {
+                Log.write("Notifications are not allowed")
+                if alertIfNotAllowed {
+                    DispatchQueue.main.async {
+                        NSApp.activate(ignoringOtherApps: true)
+                        let alert = NSAlert()
+                        alert.messageText = "Teams Busy Light"
+                        alert.informativeText = body
+                        alert.runModal()
+                    }
+                }
+                return
+            }
             let content = UNMutableNotificationContent()
             content.title = "Teams Busy Light"
             content.body = body
