@@ -69,6 +69,9 @@ class TeamsStatusSensor(RestoreSensor):
         return {
             "computer": self._data.computer,
             "teams_language": self._data.language,
+            "source": self._data.source,
+            "app_version": self._data.app_version,
+            "platform": self._data.platform,
             "last_seen": self._data.last_seen.isoformat()
             if self._data.last_seen
             else None,

@@ -47,6 +47,21 @@ enum L {
     static let pauseDay = t("For 1 Day", "1 Tag")
     static let pauseAlways = t("Until Resumed", "Bis ich fortsetze")
     static let menuResume = t("Resume Sending", "Senden fortsetzen")
+    static let menuSetStatus = t("Set Status", "Status festlegen")
+    static let manualFor30Minutes = t("For 30 Minutes", "30 Minuten")
+    static let manualForHour = t("For 1 Hour", "1 Stunde")
+    static let manualFor2Hours = t("For 2 Hours", "2 Stunden")
+    static let manualUntilReset = t("Until Reset", "Bis ich ihn zurücksetze")
+    static let menuUseTeamsStatus = t("Use Teams Status Again", "Wieder Teams-Status verwenden")
+    static func menuManualStatus(_ name: String, until: String?) -> String {
+        if let until {
+            return t("Teams: \(name) (set manually until \(until))", "Teams: \(name) (manuell bis \(until))")
+        }
+        return t("Teams: \(name) (set manually)", "Teams: \(name) (manuell)")
+    }
+    static func menuOtherCall(_ apps: String) -> String {
+        t("Call: In a call (microphone: \(apps))", "Anruf: Im Anruf (Mikrofon: \(apps))")
+    }
     static let menuConnecting = t("Home Assistant: connecting…", "Home Assistant: wird verbunden …")
     static let menuNoLogAccess = t("No access to the Teams logs", "Kein Zugriff auf die Teams-Logs")
     static let menuSettings = t("Settings…", "Einstellungen …")
@@ -126,6 +141,17 @@ enum L {
         t("\"\(entry)\" is not a valid network. Enter networks like 192.168.1.0/24.",
           "„\(entry)“ ist kein gültiges Netz. Gib Netze wie 192.168.1.0/24 ein.")
     }
+    static let detectOtherCalls = t("Also detect calls in other apps", "Auch Anrufe in anderen Apps erkennen")
+    static let detectOtherCallsHint = t(
+        "Reports a call while any app uses the microphone (Zoom, Webex, FaceTime, a browser …). Home Assistant also gets whether the camera and the microphone are in use.",
+        "Meldet einen Anruf, solange irgendeine App das Mikrofon nutzt (Zoom, Webex, FaceTime, Browser …). Home Assistant erfährt außerdem, ob Kamera und Mikrofon in Benutzung sind."
+    )
+    static let copyDiagnostics = t("Copy Diagnostics", "Diagnose kopieren")
+    static let diagnosticsCopied = t("Copied – paste it into your issue or message.", "Kopiert – füge sie in deine Fehlermeldung oder Nachricht ein.")
+    static let diagnosticsHint = t(
+        "Version, detection, network, sending and the last log lines. The webhook ID is left out.",
+        "Version, Erkennung, Netz, Senden und die letzten Logzeilen. Die Webhook-ID wird weggelassen."
+    )
     static let autostart = t("Start at login", "Bei der Anmeldung starten")
     static let test = t("Send Test", "Test senden")
     static let testing = t("Sending…", "Wird gesendet …")

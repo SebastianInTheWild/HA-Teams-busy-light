@@ -1,5 +1,19 @@
 {
   "entity": {
+    "binary_sensor": {
+      "camera": {
+        "default": "mdi:video-off",
+        "state": {
+          "on": "mdi:video"
+        }
+      },
+      "microphone": {
+        "default": "mdi:microphone-off",
+        "state": {
+          "on": "mdi:microphone"
+        }
+      }
+    },
     "sensor": {
       "status": {
         "default": "mdi:microsoft-teams",

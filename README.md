@@ -121,14 +121,39 @@ https://github.com/SebastianInTheWild/HA-Teams-busy-light/blob/main/blueprints/a
 |--------|--------|
 | `sensor.teams_status` | `available`, `busy`, `in_a_call`, `in_a_meeting`, `presenting`, `focusing`, `do_not_disturb`, `be_right_back`, `away`, `offline` |
 | `sensor.teams_activity` | `not_in_call`, `in_call`, `incoming_call`, `outgoing_call` |
+| `binary_sensor.teams_camera` | `on` while any app on the computer uses a camera |
+| `binary_sensor.teams_microphone` | `on` while any app on the computer uses a microphone |
 
 The states are language-neutral, so automations work in every language; the UI shows them
 translated (e.g. `in_call` → "Im Anruf" / "In a call"). Entity IDs always use English
 sensor names, regardless of the Home Assistant UI language. The status sensor has the attributes
-`computer`, `teams_language` and `last_seen`.
+`computer`, `teams_language`, `last_seen`, `source` (`teams`, or `manual` when the status was
+set in the menu of the app), `app_version` and `platform`.
+
+Camera and microphone come from the operating system, so they also work with Zoom, Webex or a
+browser; with **Also detect calls in other apps** (on by default) the activity is `in_call`
+while any app uses the microphone. They stay unknown for apps older than 1.5.0. Example: a
+light that turns red only while the camera is on:
+
+```yaml
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.teams_camera
+actions:
+  - action: light.turn_on
+    target:
+      entity_id: light.office_door
+    data:
+      color_name: "{{ 'red' if trigger.to_state.state == 'on' else 'green' }}"
+```
 
 If a computer stops reporting (shut down, asleep), the integration sets the status to
-`offline` after the timeout (default 180 s, change it under **Configure**).
+`offline` and camera and microphone to off after the timeout (default 180 s, change it under
+**Configure**).
+
+When an app reports a version older than the integration, Home Assistant shows a repair
+issue under **Settings → Repairs** until the updated app reports. The device page shows the
+app version.
 
 ## How it works
 
@@ -157,6 +182,8 @@ your language to [`windows/Languages.ps1`](windows/Languages.ps1) and open a pul
 
 ## Troubleshooting
 
+* **Copy diagnostics:** the settings window of the app has **Copy diagnostics** (version,
+  detection, network, sending, last log lines, without the webhook ID) – paste it into an issue.
 * **macOS:** see [macos/README.md](macos/README.md#troubleshooting).
 * **Status not recognized (Windows):** look for lines with `SetTaskbarIconOverlay` / `SetBadge` in the
   newest `MSTeams_*.log` and [open an issue](https://github.com/SebastianInTheWild/HA-Teams-busy-light/issues/new/choose)

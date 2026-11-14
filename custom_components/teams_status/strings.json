@@ -31,6 +31,14 @@
     }
   },
   "entity": {
+    "binary_sensor": {
+      "camera": {
+        "name": "Camera"
+      },
+      "microphone": {
+        "name": "Microphone"
+      }
+    },
     "sensor": {
       "status": {
         "name": "Status",
@@ -55,6 +63,23 @@
           },
           "last_seen": {
             "name": "Last seen"
+          },
+          "source": {
+            "name": "Source",
+            "state": {
+              "teams": "Teams",
+              "manual": "Set manually"
+            }
+          },
+          "app_version": {
+            "name": "App version"
+          },
+          "platform": {
+            "name": "Platform",
+            "state": {
+              "windows": "Windows",
+              "macos": "macOS"
+            }
           }
         }
       },
@@ -67,6 +92,12 @@
           "outgoing_call": "Outgoing call"
         }
       }
+    }
+  },
+  "issues": {
+    "outdated_app": {
+      "title": "Teams Busy Light app on {computer} is outdated",
+      "description": "The Teams Busy Light app on {computer} has version {app_version}, the integration has version {integration_version}. Update the app: choose \"Install version …\" in its menu, or run the installer of the latest release (Windows: Install.cmd, macOS: install.sh). This message disappears once the updated app reports."
     }
   }
 }

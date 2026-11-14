@@ -15,6 +15,8 @@ struct AppSettings: Equatable {
     var askForNewNetworks = true
     /// Networks the user chose not to add (not asked again)
     var ignoredNetworks = ""
+    /// Report a call while any app uses the microphone (Zoom, Webex, browser …)
+    var detectOtherCalls = true
 
     private enum Key {
         static let webhookURL = "webhookURL"
@@ -24,6 +26,7 @@ struct AppSettings: Equatable {
         static let homeNetworks = "homeNetworks"
         static let askForNewNetworks = "askForNewNetworks"
         static let ignoredNetworks = "ignoredNetworks"
+        static let detectOtherCalls = "detectOtherCalls"
     }
 
     static func load() -> AppSettings {
@@ -44,6 +47,9 @@ struct AppSettings: Equatable {
             settings.askForNewNetworks = defaults.bool(forKey: Key.askForNewNetworks)
         }
         settings.ignoredNetworks = defaults.string(forKey: Key.ignoredNetworks) ?? ""
+        if defaults.object(forKey: Key.detectOtherCalls) != nil {
+            settings.detectOtherCalls = defaults.bool(forKey: Key.detectOtherCalls)
+        }
         return settings
     }
 
@@ -56,6 +62,7 @@ struct AppSettings: Equatable {
         defaults.set(homeNetworks, forKey: Key.homeNetworks)
         defaults.set(askForNewNetworks, forKey: Key.askForNewNetworks)
         defaults.set(ignoredNetworks, forKey: Key.ignoredNetworks)
+        defaults.set(detectOtherCalls, forKey: Key.detectOtherCalls)
     }
 
     var isConfigured: Bool { AppSettings.isValidWebhook(webhookURL) }
@@ -83,6 +90,30 @@ enum SendPause {
             UserDefaults.standard.set(until, forKey: key)
         } else {
             UserDefaults.standard.removeObject(forKey: key)
+        }
+    }
+}
+
+/// Status set from the menu instead of the Teams status, kept over restarts.
+/// `distantFuture` means until reset.
+enum ManualStatus {
+    private static let statusKey = "manualStatus"
+    private static let untilKey = "manualStatusUntil"
+
+    static func load() -> (status: String, until: Date)? {
+        guard let status = UserDefaults.standard.string(forKey: statusKey),
+              let until = UserDefaults.standard.object(forKey: untilKey) as? Date
+        else { return nil }
+        return (status, until)
+    }
+
+    static func save(_ value: (status: String, until: Date)?) {
+        if let value {
+            UserDefaults.standard.set(value.status, forKey: statusKey)
+            UserDefaults.standard.set(value.until, forKey: untilKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: statusKey)
+            UserDefaults.standard.removeObject(forKey: untilKey)
         }
     }
 }

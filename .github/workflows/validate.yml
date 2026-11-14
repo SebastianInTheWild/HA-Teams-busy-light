@@ -25,6 +25,20 @@ jobs:
           # Brand images ship locally in custom_components/teams_status/brand
           ignore: brands
 
+  tests:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          # The current Home Assistant needs Python 3.14
+          python-version: "3.14"
+      - name: Install
+        run: pip install pytest-homeassistant-custom-component
+      - name: Test
+        run: pytest -q
+
   shellcheck:
     name: ShellCheck (macOS scripts)
     runs-on: ubuntu-latest

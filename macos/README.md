@@ -97,12 +97,21 @@ Open **Settings…** in the menu (or double-click the app in `~/Applications`):
 | Check Teams | 2 s | Check interval |
 | Send only in these networks | empty | Optional list of networks (e.g. `192.168.1.0/24, 10.0.0.0/8`); outside them nothing is sent, not even through an externally reachable webhook URL. **Add Current Network** fills in the network the Mac is in. Empty = send everywhere |
 | Ask when in a new network | on | While networks are set: asks whether to add a network the Mac is in that is not in the list yet ("Don't Add" is remembered) |
+| Also detect calls in other apps | on | Reports a call while any app records from the microphone (Zoom, Webex, FaceTime, a browser …). Camera and microphone are sent to Home Assistant in any case; macOS asks for no permission (only the "in use" state is read) |
 | Start at login | on | Start the app after login |
 | Check for updates daily | on | Shows a menu entry and a notification when a new release is available; after confirmation the app downloads, checks and installs it |
 
 **Pause Sending** in the menu stops sending for 1 hour, 8 hours, 1 day or until **Resume
 Sending**; Home Assistant gets `offline` once. The pause is kept when the app restarts. The
 settings window shows the installed version.
+
+**Set Status** in the menu sends a status of your choice (Available, Busy, Do not disturb, Be
+right back, Away) instead of the Teams status for 30 minutes, 1 or 2 hours or until **Use Teams
+Status Again**, e.g. while you work without Teams or call from your phone. It is kept when the
+app restarts; Home Assistant shows `source: manual` on the status sensor.
+
+**Copy Diagnostics** in the settings window copies version, detection, network, sending and
+the last log lines (without the webhook ID) for a bug report.
 
 The app sends `offline` when it is quit and before the Mac goes to sleep (only inside the networks above). Outside the networks Home Assistant sets Teams offline after the offline timeout of the integration.
 

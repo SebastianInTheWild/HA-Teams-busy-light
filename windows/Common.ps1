@@ -15,6 +15,7 @@ $DataDir = Join-Path $env:LOCALAPPDATA 'TeamsBusyLight'
 $SettingsPath = Join-Path $DataDir 'settings.json'
 $LogPath = Join-Path $DataDir 'TeamsBusyLight.log'
 $PausePath = Join-Path $DataDir 'pause.txt'
+$ManualStatusPath = Join-Path $DataDir 'manual-status.txt'
 $LauncherPath = Join-Path $ProgramDir 'TeamsBusyLight.exe'
 $TeamsLogFolder = Join-Path $env:LOCALAPPDATA 'Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\Logs'
 $RunKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
@@ -252,6 +253,7 @@ function Read-TeamsSettings {
         HomeNetworks = ''
         AskForNewNetworks = $true
         IgnoredNetworks = ''
+        DetectOtherCalls = $true
     }
     if (Test-Path $SettingsPath) {
         try {
@@ -273,6 +275,7 @@ function Read-TeamsSettings {
     $Values.HomeNetworks = ([string]$Values.HomeNetworks).Trim()
     $Values.AskForNewNetworks = [bool]$Values.AskForNewNetworks
     $Values.IgnoredNetworks = ([string]$Values.IgnoredNetworks).Trim()
+    $Values.DetectOtherCalls = [bool]$Values.DetectOtherCalls
     if ($Values.TeamsLanguage -notin @('auto', 'de', 'en')) {
         $Values.TeamsLanguage = 'auto'
     }
@@ -320,6 +323,101 @@ function Set-TeamsPause {
     [System.IO.File]::WriteAllText($PausePath, $Text, $Utf8NoBom)
 }
 
+# Status set from the tray menu instead of the Teams status, kept over
+# restarts: "<status> <end as UTC timestamp or always>", $null = none
+function Get-TeamsManualStatus {
+    if (-not (Test-Path $ManualStatusPath)) {
+        return $null
+    }
+    $Parts = ([System.IO.File]::ReadAllText($ManualStatusPath)).Trim() -split '\s+', 2
+    if ($Parts.Count -ne 2 -or $Parts[0] -notin $ManualStatuses) {
+        return $null
+    }
+    if ($Parts[1] -eq 'always') {
+        return @{ Status = $Parts[0]; Until = [datetime]::MaxValue }
+    }
+    $Until = [datetime]::MinValue
+    if ([datetime]::TryParse($Parts[1], [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$Until)) {
+        return @{ Status = $Parts[0]; Until = $Until.ToLocalTime() }
+    }
+    return $null
+}
+
+function Set-TeamsManualStatus {
+    param([string]$Status, [Nullable[datetime]]$Until)
+
+    if (-not $Status) {
+        Remove-Item -LiteralPath $ManualStatusPath -ErrorAction SilentlyContinue
+        return
+    }
+    if (-not (Test-Path $DataDir)) {
+        New-Item -Path $DataDir -ItemType Directory -Force | Out-Null
+    }
+    $End = if ($Until -eq [datetime]::MaxValue) { 'always' } else { $Until.ToUniversalTime().ToString('o') }
+    [System.IO.File]::WriteAllText($ManualStatusPath, "$Status $End", $Utf8NoBom)
+}
+
+# Statuses offered under "Set status" in the tray menu
+$ManualStatuses = @('available', 'busy', 'do_not_disturb', 'be_right_back', 'away')
+
+# Camera and microphone in use by any app. Windows records the use per app
+# for the privacy settings ("recently used"): an app uses the device while
+# LastUsedTimeStop is 0. Reads only the registry, no permission needed.
+function Get-TeamsDeviceUsage {
+    $Result = @{ Camera = $false; Microphone = $false; CameraApps = @(); MicrophoneApps = @() }
+    foreach ($Device in @(@('webcam', 'Camera'), @('microphone', 'Microphone'))) {
+        $Apps = @(Get-TeamsDeviceUsers $Device[0])
+        $Result[$Device[1]] = $Apps.Count -gt 0
+        $Result["$($Device[1])Apps"] = $Apps
+    }
+    return $Result
+}
+
+function Get-TeamsDeviceUsers {
+    param([string]$Capability)
+
+    $Users = New-Object System.Collections.Generic.List[string]
+    $Root = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\$Capability")
+    if (-not $Root) {
+        return $Users
+    }
+    try {
+        $Check = {
+            param($Key, [string]$Name)
+            $Start = $Key.GetValue('LastUsedTimeStart')
+            $Stop = $Key.GetValue('LastUsedTimeStop')
+            if ($null -ne $Start -and [long]$Start -ne 0 -and $null -ne $Stop -and [long]$Stop -eq 0) {
+                $Users.Add($Name)
+            }
+        }
+        foreach ($Name in $Root.GetSubKeyNames()) {
+            $Key = $Root.OpenSubKey($Name)
+            if (-not $Key) { continue }
+            try {
+                if ($Name -eq 'NonPackaged') {
+                    # Desktop apps: the path with # instead of \, e.g. C:#Program Files#Zoom#bin#Zoom.exe
+                    foreach ($AppName in $Key.GetSubKeyNames()) {
+                        $AppKey = $Key.OpenSubKey($AppName)
+                        if (-not $AppKey) { continue }
+                        try { & $Check $AppKey ($AppName -split '#')[-1] } finally { $AppKey.Close() }
+                    }
+                }
+                else {
+                    # Store apps, e.g. MSTeams_8wekyb3d8bbwe
+                    & $Check $Key ($Name -split '_')[0]
+                }
+            }
+            finally {
+                $Key.Close()
+            }
+        }
+    }
+    finally {
+        $Root.Close()
+    }
+    return $Users
+}
+
 # Installed version (version.txt, written by the installer), "0.0.0" if unknown
 function Get-TeamsVersion {
     param([string]$Root = $PSScriptRoot)
@@ -330,6 +428,13 @@ function Get-TeamsVersion {
     }
     return '0.0.0'
 }
+
+# Sent with every message, so Home Assistant can point out outdated apps
+$script:TeamsAppVersion = Get-TeamsVersion
+
+# Camera and microphone are reported off together with offline (the app
+# stops watching them)
+$OfflineExtra = @{ camera = $false; microphone = $false; source = 'teams' }
 
 # True if version a is newer than version b (e.g. "1.10.0" > "1.9.2")
 function Test-TeamsNewerVersion {
@@ -623,13 +728,17 @@ function Start-TeamsStatusSend {
         [string]$WebhookUrl,
         [string]$Status,
         [string]$Activity,
-        [string]$Language
+        [string]$Language,
+        [hashtable]$Extra
     )
 
-    $Body = [ordered]@{ computer = $env:COMPUTERNAME }
+    $Body = [ordered]@{ computer = $env:COMPUTERNAME; app_version = $script:TeamsAppVersion; platform = 'windows' }
     if ($Status) { $Body.status = $Status }
     if ($Activity) { $Body.activity = $Activity }
     if ($Language) { $Body.language = $Language }
+    if ($Extra) {
+        foreach ($Key in $Extra.Keys) { $Body[$Key] = $Extra[$Key] }
+    }
     $Content = New-Object System.Net.Http.StringContent(
         ($Body | ConvertTo-Json -Compress),
         [System.Text.Encoding]::UTF8,
@@ -667,12 +776,13 @@ function Send-TeamsStatus {
         [string]$Status,
         [string]$Activity,
         [string]$Language,
+        [hashtable]$Extra,
         [int]$TimeoutSeconds = 10
     )
 
     $Client = New-TeamsHttpClient -TimeoutSeconds $TimeoutSeconds
     try {
-        $Task = Start-TeamsStatusSend -Client $Client -WebhookUrl $WebhookUrl -Status $Status -Activity $Activity -Language $Language
+        $Task = Start-TeamsStatusSend -Client $Client -WebhookUrl $WebhookUrl -Status $Status -Activity $Activity -Language $Language -Extra $Extra
         try {
             [void]$Task.Wait()
         }
@@ -713,7 +823,9 @@ function Show-TeamsSettingsDialog {
         [bool]$Autostart = $true,
         [switch]$Install,
         [bool]$LegacyFound = $false,
-        [string]$Version = (Get-TeamsVersion)
+        [string]$Version = (Get-TeamsVersion),
+        # Returns the text for "Copy diagnostics" (only in the tray app)
+        [scriptblock]$Diagnostics
     )
 
     $Width = 660
@@ -892,7 +1004,17 @@ function Show-TeamsSettingsDialog {
     $AskNetworksInput.Text = $Messages.AskForNewNetworks
     $AskNetworksInput.Checked = [bool]$Settings.AskForNewNetworks
     $Form.Controls.Add($AskNetworksInput)
-    $Y = $AskNetworksInput.Bottom + 16
+    $Y = $AskNetworksInput.Bottom + 12
+
+    $OtherCallsInput = New-Object System.Windows.Forms.CheckBox
+    $OtherCallsInput.Location = New-Object System.Drawing.Point($Margin, $Y)
+    $OtherCallsInput.Size = New-Object System.Drawing.Size($InnerWidth, 24)
+    $OtherCallsInput.Text = $Messages.DetectOtherCalls
+    $OtherCallsInput.Checked = [bool]$Settings.DetectOtherCalls
+    $Form.Controls.Add($OtherCallsInput)
+    $Y = $OtherCallsInput.Bottom
+    $Hint = & $AddLabel $Messages.DetectOtherCallsHint ($Margin + 18) $Y ($InnerWidth - 18) -Hint
+    $Y = $Hint.Bottom + 12
 
     $AutostartInput = New-Object System.Windows.Forms.CheckBox
     $AutostartInput.Location = New-Object System.Drawing.Point($Margin, $Y)
@@ -933,9 +1055,24 @@ function Show-TeamsSettingsDialog {
     $TestButton.ForeColor = [System.Drawing.Color]::FromArgb(45, 80, 145)
     $Form.Controls.Add($TestButton)
 
+    $DiagnosticsButton = $null
+    $ResultWidth = $InnerWidth - 142
+    if ($Diagnostics) {
+        $DiagnosticsButton = New-Object System.Windows.Forms.Button
+        $DiagnosticsButton.Size = New-Object System.Drawing.Size(170, 32)
+        $DiagnosticsButton.Location = New-Object System.Drawing.Point(($Margin + $InnerWidth - 170), $Y)
+        $DiagnosticsButton.Text = $Messages.CopyDiagnostics
+        $DiagnosticsButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+        $DiagnosticsButton.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(205, 213, 224)
+        $DiagnosticsButton.BackColor = [System.Drawing.Color]::White
+        $DiagnosticsButton.ForeColor = [System.Drawing.Color]::FromArgb(45, 80, 145)
+        $Form.Controls.Add($DiagnosticsButton)
+        $ResultWidth -= 180
+    }
+
     $TestResult = New-Object System.Windows.Forms.Label
     $TestResult.Location = New-Object System.Drawing.Point(($Margin + 142), ($Y + 2))
-    $TestResult.Size = New-Object System.Drawing.Size(($InnerWidth - 142), 30)
+    $TestResult.Size = New-Object System.Drawing.Size($ResultWidth, 30)
     $TestResult.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
     $TestResult.AutoEllipsis = $true
     $Form.Controls.Add($TestResult)
@@ -1027,6 +1164,20 @@ function Show-TeamsSettingsDialog {
         }
     })
 
+    if ($DiagnosticsButton) {
+        $DiagnosticsButton.Add_Click({
+            try {
+                [System.Windows.Forms.Clipboard]::SetText((& $Diagnostics))
+                $TestResult.ForeColor = [System.Drawing.Color]::FromArgb(30, 120, 60)
+                $TestResult.Text = $Messages.DiagnosticsCopied
+            }
+            catch {
+                $TestResult.ForeColor = [System.Drawing.Color]::FromArgb(170, 40, 40)
+                $TestResult.Text = $_.Exception.Message
+            }
+        })
+    }
+
     $Form.Add_Shown({ $Form.Activate(); $WebhookInput.Focus() })
 
     try {
@@ -1057,6 +1208,7 @@ function Show-TeamsSettingsDialog {
                 HomeNetworks = $Networks
                 AskForNewNetworks = $AskNetworksInput.Checked
                 IgnoredNetworks = [string]$Settings.IgnoredNetworks
+                DetectOtherCalls = $OtherCallsInput.Checked
             }
             return @{
                 Settings = $NewSettings

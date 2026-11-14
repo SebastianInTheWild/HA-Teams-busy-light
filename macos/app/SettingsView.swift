@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Values edited in the settings window. An ObservableObject instead of
@@ -11,6 +12,8 @@ final class SettingsModel: ObservableObject {
     @Published var checkForUpdates: Bool
     @Published var homeNetworks: String
     @Published var askForNewNetworks: Bool
+    @Published var detectOtherCalls: Bool
+    @Published var diagnosticsCopied = false
     let ignoredNetworks: String
     @Published var testing = false
     @Published var testResult: (text: String, ok: Bool)?
@@ -26,6 +29,7 @@ final class SettingsModel: ObservableObject {
         checkForUpdates = settings.checkForUpdates
         homeNetworks = settings.homeNetworks
         askForNewNetworks = settings.askForNewNetworks
+        detectOtherCalls = settings.detectOtherCalls
         ignoredNetworks = settings.ignoredNetworks
     }
 }
@@ -36,6 +40,8 @@ struct SettingsView: View {
     @ObservedObject var model: SettingsModel
     /// Current status and call state, sent by "Send Test"
     let currentStatus: () -> (status: String?, inCall: Bool)
+    /// Text for "Copy Diagnostics"
+    let diagnostics: () -> String
     let onSave: (AppSettings, Bool) -> Void
     let onClose: () -> Void
     let onGrantAccess: () -> Void
@@ -108,8 +114,25 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Toggle(L.detectOtherCalls, isOn: $model.detectOtherCalls)
+                } footer: {
+                    hint(L.detectOtherCallsHint)
+                }
+
+                Section {
                     Toggle(L.autostart, isOn: $model.autostart)
                     Toggle(L.checkForUpdates, isOn: $model.checkForUpdates)
+                }
+
+                Section {
+                    HStack {
+                        Button(L.copyDiagnostics, action: copyDiagnostics)
+                        if model.diagnosticsCopied {
+                            Text(L.diagnosticsCopied).foregroundStyle(.secondary)
+                        }
+                    }
+                } footer: {
+                    hint(L.diagnosticsHint)
                 }
             }
             .formStyle(.grouped)
@@ -164,6 +187,13 @@ struct SettingsView: View {
         }
     }
 
+    private func copyDiagnostics() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(diagnostics(), forType: .string)
+        model.diagnosticsCopied = true
+    }
+
     /// Appends the networks the Mac is in right now
     private func addCurrentNetwork() {
         let current = HomeNetwork.currentNetworks()
@@ -192,6 +222,7 @@ struct SettingsView: View {
         settings.checkForUpdates = model.checkForUpdates
         settings.homeNetworks = networks
         settings.askForNewNetworks = model.askForNewNetworks
+        settings.detectOtherCalls = model.detectOtherCalls
         settings.ignoredNetworks = model.ignoredNetworks
         onSave(settings, model.autostart)
     }

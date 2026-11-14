@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+* macOS and Windows: camera and microphone in use by any app are sent to Home Assistant (new `binary_sensor.…_camera` and `binary_sensor.…_microphone`); optional "Also detect calls in other apps" (on by default) reports a call while any app uses the microphone (Zoom, Webex, FaceTime, browser …)
+* macOS and Windows: set a status from the menu instead of the Teams status (30 minutes, 1 or 2 hours, or until reset); Home Assistant shows `source: manual`
+* macOS and Windows: "Copy diagnostics" in the settings window (without the webhook ID)
+* Integration: the apps send their version and platform; the device shows the app version, and an outdated app raises a repair issue
+* Integration: tests with pytest-homeassistant-custom-component in CI
+
 ## 1.4.0
 
 * macOS and Windows: optional "Send only in these networks" (e.g. `192.168.1.0/24`): outside these networks nothing is sent to Home Assistant, even if the webhook URL is reachable from outside; asks whether to add a new network (can be turned off)

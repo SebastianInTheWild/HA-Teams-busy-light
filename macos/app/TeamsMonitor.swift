@@ -166,17 +166,31 @@ enum Webhook {
     }()
 
     static let computerName = Host.current().localizedName ?? ProcessInfo.processInfo.hostName
+    static let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
+
+    /// Fields of every message; `extra` adds e.g. camera, microphone, source
+    static func body(status: String?, inCall: Bool, extra: [String: Any] = [:]) -> [String: Any] {
+        var body: [String: Any] = [
+            "computer": computerName,
+            "activity": inCall ? "in_call" : "not_in_call",
+            "app_version": appVersion,
+            "platform": "macos",
+        ]
+        if let status {
+            body["status"] = status
+        }
+        body.merge(extra) { _, new in new }
+        return body
+    }
 
     /// Calls `completion` on the main queue with nil on success or the reason
-    static func send(url: String, status: String?, inCall: Bool, completion: @escaping (String?) -> Void) {
+    static func send(url: String, status: String?, inCall: Bool, extra: [String: Any] = [:],
+                     completion: @escaping (String?) -> Void) {
         guard let target = URL(string: url) else {
             completion(L.invalidWebhook)
             return
         }
-        var body: [String: String] = ["computer": computerName, "activity": inCall ? "in_call" : "not_in_call"]
-        if let status {
-            body["status"] = status
-        }
+        let body = body(status: status, inCall: inCall, extra: extra)
         var request = URLRequest(url: target)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -193,25 +207,42 @@ enum Webhook {
         }.resume()
     }
 
+    /// Camera and microphone are reported off together with offline (the app
+    /// stops watching them)
+    static let offlineExtra: [String: Any] = ["camera": false, "microphone": false, "source": "teams"]
+
     /// Sends and waits (used when quitting or going to sleep)
     static func sendAndWait(url: String, status: String, inCall: Bool, timeout: TimeInterval) {
         guard let target = URL(string: url) else { return }
         var request = URLRequest(url: target, timeoutInterval: timeout)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: [
-            "computer": computerName, "status": status, "activity": inCall ? "in_call" : "not_in_call",
-        ])
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body(status: status, inCall: inCall, extra: offlineExtra))
         let done = DispatchSemaphore(value: 0)
         session.dataTask(with: request) { _, _, _ in done.signal() }.resume()
         _ = done.wait(timeout: .now() + timeout)
     }
 }
 
-/// Watches Teams and sends every change and a keep-alive to Home Assistant
+/// Watches Teams, camera and microphone and sends every change and a
+/// keep-alive to Home Assistant
 final class TeamsMonitor {
+    /// Status read from Teams
     private(set) var status: String?
-    private(set) var inCall = false
+    /// Teams reports a call
+    private(set) var teamsInCall = false
+    /// Any app uses a camera or microphone
+    private(set) var camera = false
+    private(set) var microphone = false
+    /// Apps recording from the microphone (macOS 14.2 and later)
+    private(set) var microphoneUsers: [String] = []
+    /// Status set from the menu, until the given time (`distantFuture` = until reset)
+    private(set) var manual = ManualStatus.load()
+    var manualActive: Bool { (manual?.until ?? .distantPast) > Date() }
+    /// Status that is sent: the manual one, otherwise the Teams status
+    var effectiveStatus: String? { manualActive ? manual?.status : status }
+    /// In a call in Teams or, if enabled, in any app using the microphone
+    var inCall: Bool { teamsInCall || (settings.detectOtherCalls && microphone) }
     private(set) var lastSent: Date?
     private(set) var sendError: String?
     /// True while "send only in these networks" is set and the Mac is in none of them
@@ -220,6 +251,8 @@ final class TeamsMonitor {
     private(set) var pausedUntil = SendPause.load()
     var sendingPaused: Bool { (pausedUntil ?? .distantPast) > Date() }
     var logAccessDenied: Bool { logReader.accessDenied }
+    /// Raw presence value from the Teams log, e.g. "DoNotDisturb"
+    var teamsPresence: String? { logReader.presence }
 
     /// Called on the main queue whenever something shown in the menu changes
     var onChange: (() -> Void)?
@@ -230,8 +263,8 @@ final class TeamsMonitor {
     private let logReader = TeamsLogReader()
     private var timer: Timer?
     private var sending = false
-    private var sentStatus: String?
-    private var sentInCall: Bool?
+    /// What was sent last (status, call, camera, microphone, source)
+    private var sentKey: String?
     private var retryAfter = Date.distantPast
     private var unknownLogged: String?
     private var accessLogged = false
@@ -254,7 +287,7 @@ final class TeamsMonitor {
     /// Applies new settings and sends right away
     func update(settings: AppSettings) {
         self.settings = settings
-        sentStatus = nil
+        sentKey = nil
         sendError = nil
         retryAfter = .distantPast
         start()
@@ -272,7 +305,7 @@ final class TeamsMonitor {
         SendPause.save(until)
         Log.write(until == .distantFuture ? "Sending paused" : "Sending paused until \(Log.timestamp(until))")
         if tellHomeAssistant {
-            Webhook.send(url: settings.webhookURL, status: "offline", inCall: false) { _ in }
+            Webhook.send(url: settings.webhookURL, status: "offline", inCall: false, extra: Webhook.offlineExtra) { _ in }
         }
         sendError = nil
         onChange?()
@@ -282,7 +315,29 @@ final class TeamsMonitor {
         pausedUntil = nil
         SendPause.save(nil)
         Log.write("Sending resumed")
-        sentStatus = nil
+        sentKey = nil
+        retryAfter = .distantPast
+        onChange?()
+        sendIfNeeded()
+    }
+
+    /// Sends the given status instead of the Teams status until `until`
+    func setManualStatus(_ status: String, until: Date) {
+        manual = (status, until)
+        ManualStatus.save(manual)
+        Log.write("Manual status \(status)" + (until == .distantFuture ? "" : " until \(Log.timestamp(until))"))
+        sentKey = nil
+        retryAfter = .distantPast
+        onChange?()
+        sendIfNeeded()
+    }
+
+    func clearManualStatus() {
+        guard manual != nil else { return }
+        manual = nil
+        ManualStatus.save(nil)
+        Log.write("Manual status ended, using the Teams status")
+        sentKey = nil
         retryAfter = .distantPast
         onChange?()
         sendIfNeeded()
@@ -295,7 +350,7 @@ final class TeamsMonitor {
         if maySend {
             Webhook.sendAndWait(url: settings.webhookURL, status: "offline", inCall: false, timeout: 3)
         }
-        sentStatus = nil
+        sentKey = nil
     }
 
     func resume() {
@@ -327,14 +382,34 @@ final class TeamsMonitor {
                 changed = true
             }
             let call = Teams.isInCall
-            if call != inCall {
-                inCall = call
+            if call != teamsInCall {
+                teamsInCall = call
                 changed = true
             }
-        } else if status != "offline" || inCall {
+        } else if status != "offline" || teamsInCall {
             status = "offline"
-            inCall = false
+            teamsInCall = false
             changed = true
+        }
+
+        let cameraNow = DeviceUsage.cameraInUse
+        if cameraNow != camera {
+            camera = cameraNow
+            Log.write(camera ? "Camera on" : "Camera off")
+            changed = true
+        }
+        let microphoneNow = DeviceUsage.microphoneInUse
+        if microphoneNow != microphone {
+            microphone = microphoneNow
+            microphoneUsers = microphoneNow ? DeviceUsage.microphoneUsers() : []
+            Log.write(microphoneNow
+                ? "Microphone in use" + (microphoneUsers.isEmpty ? "" : " by \(microphoneUsers.joined(separator: ", "))")
+                : "Microphone no longer in use")
+            changed = true
+        }
+
+        if manual != nil && !manualActive {
+            clearManualStatus()
         }
 
         if pausedUntil != nil && !sendingPaused {
@@ -350,7 +425,7 @@ final class TeamsMonitor {
                 sendError = nil
             } else {
                 Log.write("Back in a home network, sending again")
-                sentStatus = nil
+                sentKey = nil
                 retryAfter = .distantPast
             }
             onChange?()
@@ -360,7 +435,7 @@ final class TeamsMonitor {
         }
 
         if changed {
-            Log.write("Status: \(status ?? "none"), activity: \(inCall ? "in_call" : "not_in_call")")
+            Log.write("Status: \(effectiveStatus ?? "none")\(manualActive ? " (manual)" : ""), activity: \(inCall ? "in_call" : "not_in_call")")
             onChange?()
         }
         sendIfNeeded()
@@ -369,12 +444,15 @@ final class TeamsMonitor {
     private func sendIfNeeded() {
         guard settings.isConfigured, !awayFromHome, !sendingPaused, !sending, Date() >= retryAfter else { return }
         let due = Date().timeIntervalSince(lastSent ?? .distantPast) >= TimeInterval(settings.heartbeatSeconds)
-        guard status != sentStatus || inCall != sentInCall || due else { return }
-
-        let sendStatus = status
+        let sendStatus = effectiveStatus
         let sendInCall = inCall
+        let source = manualActive ? "manual" : "teams"
+        let key = "\(sendStatus ?? "-")|\(sendInCall)|\(camera)|\(microphone)|\(source)"
+        guard key != sentKey || due else { return }
+
         sending = true
-        Webhook.send(url: settings.webhookURL, status: sendStatus, inCall: sendInCall) { [weak self] reason in
+        let extra: [String: Any] = ["camera": camera, "microphone": microphone, "source": source]
+        Webhook.send(url: settings.webhookURL, status: sendStatus, inCall: sendInCall, extra: extra) { [weak self] reason in
             guard let self else { return }
             self.sending = false
             if self.awayFromHome || self.sendingPaused {
@@ -391,8 +469,7 @@ final class TeamsMonitor {
                     Log.write("Home Assistant reachable again")
                 }
                 self.sendError = nil
-                self.sentStatus = sendStatus
-                self.sentInCall = sendInCall
+                self.sentKey = key
                 self.lastSent = Date()
             }
             self.onChange?()
@@ -407,6 +484,8 @@ final class TeamsMonitor {
         Teams running: \(Teams.isRunning ? "yes" : "no")
         Presence:      \(presence ?? (reader.accessDenied ? "no access to the logs" : "unknown")) -> \(presence.flatMap(Teams.mapPresence) ?? "not mapped")
         In a call:     \(Teams.isInCall ? "yes" : "no")
+        Camera:        \(DeviceUsage.cameraInUse ? "in use" : "off")
+        Microphone:    \(DeviceUsage.microphoneInUse ? "in use \(DeviceUsage.microphoneUsers())" : "off")
         """
     }
 }

@@ -72,16 +72,22 @@ $UpdateHttp.DefaultRequestHeaders.UserAgent.ParseAdd('TeamsBusyLight')
 # Current and last sent state
 $State = @{
     Status = $null
+    # Sent activity: the Teams one or, with DetectOtherCalls, in_call while
+    # any app uses the microphone
     Activity = 'not_in_call'
+    TeamsActivity = 'not_in_call'
+    Camera = $false
+    Microphone = $false
+    MicrophoneApps = @()
+    Manual = Get-TeamsManualStatus
     Language = $null
-    SentStatus = $null
-    SentActivity = $null
+    # What was sent last (status, activity, camera, microphone, source)
+    SentKey = $null
+    SendKey = $null
     LastSent = [datetime]::MinValue
     LastPoll = [datetime]::MinValue
     RetryAfter = [datetime]::MinValue
     SendTask = $null
-    SendStatus = $null
-    SendActivity = $null
     SendError = $null
     LogMissing = $false
     SettingsOpen = $false
@@ -179,11 +185,29 @@ foreach ($Choice in @(@($Messages.Pause1h, 1), @($Messages.Pause8h, 8), @($Messa
     [void]$PauseItem.DropDownItems.Add($Item)
 }
 $ResumeItem = New-Object System.Windows.Forms.ToolStripMenuItem($Messages.MenuResume)
+$SetStatusItem = New-Object System.Windows.Forms.ToolStripMenuItem($Messages.MenuSetStatus)
+foreach ($ManualStatus in $ManualStatuses) {
+    $StatusChoice = New-Object System.Windows.Forms.ToolStripMenuItem($Messages.StatusNames.$ManualStatus)
+    foreach ($Choice in @(@($Messages.Manual30m, 30), @($Messages.Manual1h, 60), @($Messages.Manual2h, 120), @($Messages.ManualAlways, 0))) {
+        $Item = New-Object System.Windows.Forms.ToolStripMenuItem($Choice[0])
+        $Item.Tag = @($ManualStatus, $Choice[1])
+        $Item.Add_Click({
+            param($EventSender)
+            $Minutes = [int]$EventSender.Tag[1]
+            Set-TeamsManualState $EventSender.Tag[0] $(if ($Minutes -eq 0) { [datetime]::MaxValue } else { (Get-Date).AddMinutes($Minutes) })
+        })
+        [void]$StatusChoice.DropDownItems.Add($Item)
+    }
+    [void]$SetStatusItem.DropDownItems.Add($StatusChoice)
+}
+$UseTeamsItem = New-Object System.Windows.Forms.ToolStripMenuItem($Messages.MenuUseTeamsStatus)
 $ExitItem = New-Object System.Windows.Forms.ToolStripMenuItem($Messages.MenuExit)
 [void]$Menu.Items.Add($StatusItem)
 [void]$Menu.Items.Add($ActivityItem)
 [void]$Menu.Items.Add($ConnectionItem)
 [void]$Menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
+[void]$Menu.Items.Add($SetStatusItem)
+[void]$Menu.Items.Add($UseTeamsItem)
 [void]$Menu.Items.Add($PauseItem)
 [void]$Menu.Items.Add($ResumeItem)
 [void]$Menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
@@ -194,13 +218,36 @@ $ExitItem = New-Object System.Windows.Forms.ToolStripMenuItem($Messages.MenuExit
 [void]$Menu.Items.Add($ExitItem)
 $Tray.ContextMenuStrip = $Menu
 
+function Format-TeamsTime {
+    param([datetime]$Time)
+    if ($Time.Date -eq (Get-Date).Date) { $Time.ToString('t') } else { $Time.ToString('g') }
+}
+
 function Update-TrayDisplay {
-    $StatusKey = if ($State.Status) { $State.Status } else { 'unknown' }
+    $EffectiveStatus = Get-TeamsEffectiveStatus
+    $StatusKey = if ($EffectiveStatus) { $EffectiveStatus } else { 'unknown' }
     $StatusName = $Messages.StatusNames.$StatusKey
     $ActivityName = $Messages.ActivityNames.($State.Activity)
 
-    $StatusItem.Text = $Messages.MenuStatus -f $StatusName
-    $ActivityItem.Text = $Messages.MenuActivity -f $ActivityName
+    if (Test-TeamsManualActive) {
+        $StatusItem.Text = if ($State.Manual.Until -eq [datetime]::MaxValue) {
+            $Messages.MenuStatusManualAlways -f $StatusName
+        }
+        else {
+            $Messages.MenuStatusManual -f $StatusName, (Format-TeamsTime $State.Manual.Until)
+        }
+    }
+    else {
+        $StatusItem.Text = $Messages.MenuStatus -f $StatusName
+    }
+    if ($State.Activity -eq 'in_call' -and $State.TeamsActivity -eq 'not_in_call') {
+        $Apps = if ($State.MicrophoneApps.Count) { $State.MicrophoneApps -join ', ' } else { '?' }
+        $ActivityItem.Text = $Messages.MenuActivityOther -f $Apps
+    }
+    else {
+        $ActivityItem.Text = $Messages.MenuActivity -f $ActivityName
+    }
+    $UseTeamsItem.Visible = Test-TeamsManualActive
     if (-not $Config.WebhookUrl) {
         $ConnectionItem.Text = $Messages.MenuNotConfigured
     }
@@ -208,11 +255,8 @@ function Update-TrayDisplay {
         $ConnectionItem.Text = if ($State.PausedUntil -eq [datetime]::MaxValue) {
             $Messages.MenuPausedAlways
         }
-        elseif ($State.PausedUntil.Date -eq (Get-Date).Date) {
-            $Messages.MenuPausedUntil -f $State.PausedUntil.ToString('t')
-        }
         else {
-            $Messages.MenuPausedUntil -f $State.PausedUntil.ToString('g')
+            $Messages.MenuPausedUntil -f (Format-TeamsTime $State.PausedUntil)
         }
     }
     elseif ($State.Away) {
@@ -230,7 +274,7 @@ function Update-TrayDisplay {
 
     $ResumeItem.Visible = [bool]$State.PausedUntil
 
-    $ColorKey = if ($State.Status -and $StatusColorKey.ContainsKey($State.Status)) { $StatusColorKey[$State.Status] } else { 'none' }
+    $ColorKey = if ($EffectiveStatus -and $StatusColorKey.ContainsKey($EffectiveStatus)) { $StatusColorKey[$EffectiveStatus] } else { 'none' }
     if ($State.Activity -ne 'not_in_call') {
         $ColorKey = 'busy'
     }
@@ -426,13 +470,13 @@ function Open-TeamsSettings {
     }
     $State.SettingsOpen = $true
     try {
-        $Result = Show-TeamsSettingsDialog -Settings $Config -Autostart (Get-TeamsAutostart)
+        $Result = Show-TeamsSettingsDialog -Settings $Config -Autostart (Get-TeamsAutostart) -Diagnostics { Get-TeamsDiagnostics }
         if ($Result) {
             Save-TeamsSettings $Result.Settings
             Set-TeamsAutostart $Result.Autostart
             $script:Config = Read-TeamsSettings
             # Send right away to the (possibly new) webhook
-            $State.SentStatus = $null
+            $State.SentKey = $null
             $State.RetryAfter = [datetime]::MinValue
             $State.SendError = $null
             $State.LastPoll = [datetime]::MinValue
@@ -469,8 +513,7 @@ function Complete-TeamsSend {
             Write-TeamsLog $Messages.LogSendOk
         }
         $State.SendError = $null
-        $State.SentStatus = $State.SendStatus
-        $State.SentActivity = $State.SendActivity
+        $State.SentKey = $State.SendKey
         $State.LastSent = Get-Date
     }
     Update-TrayDisplay
@@ -500,14 +543,133 @@ function Update-TeamsState {
         $State.Status = $Current.Status
         $Changed = $true
     }
-    if ($Current.Activity -and $Current.Activity -ne $State.Activity) {
-        $State.Activity = $Current.Activity
+    if ($Current.Activity) {
+        $State.TeamsActivity = $Current.Activity
+    }
+
+    $Devices = Get-TeamsDeviceUsage
+    if ($Devices.Camera -ne $State.Camera) {
+        $State.Camera = $Devices.Camera
+        Write-TeamsLog $(if ($Devices.Camera) { $Messages.LogCameraOn -f ($Devices.CameraApps -join ', ') } else { $Messages.LogCameraOff })
+        $Changed = $true
+    }
+    if ($Devices.Microphone -ne $State.Microphone) {
+        $State.Microphone = $Devices.Microphone
+        $State.MicrophoneApps = $Devices.MicrophoneApps
+        Write-TeamsLog $(if ($Devices.Microphone) { $Messages.LogMicrophoneOn -f ($Devices.MicrophoneApps -join ', ') } else { $Messages.LogMicrophoneOff })
+        $Changed = $true
+    }
+
+    $Activity = $State.TeamsActivity
+    if ($Activity -eq 'not_in_call' -and $Config.DetectOtherCalls -and $State.Microphone) {
+        $Activity = 'in_call'
+    }
+    if ($Activity -ne $State.Activity) {
+        $State.Activity = $Activity
         $Changed = $true
     }
     if ($Changed) {
-        Write-TeamsLog ($Messages.LogStatus -f $State.Status, $State.Activity)
+        Write-TeamsLog ($Messages.LogStatus -f (Get-TeamsEffectiveStatus), $State.Activity)
         Update-TrayDisplay
     }
+}
+
+function Test-TeamsManualActive {
+    return [bool]($State.Manual -and (Get-Date) -lt $State.Manual.Until)
+}
+
+# Status that is sent: the one set from the menu, otherwise the Teams status
+function Get-TeamsEffectiveStatus {
+    if (Test-TeamsManualActive) {
+        return $State.Manual.Status
+    }
+    return $State.Status
+}
+
+function Set-TeamsManualState {
+    param([string]$Status, [datetime]$Until)
+
+    $State.Manual = @{ Status = $Status; Until = $Until }
+    Set-TeamsManualStatus $Status $Until
+    if ($Until -eq [datetime]::MaxValue) {
+        Write-TeamsLog ($Messages.LogManualStatusAlways -f $Status)
+    }
+    else {
+        Write-TeamsLog ($Messages.LogManualStatus -f $Status, $Until.ToString('g'))
+    }
+    $State.SentKey = $null
+    $State.RetryAfter = [datetime]::MinValue
+    Update-TrayDisplay
+}
+
+function Clear-TeamsManualState {
+    if (-not $State.Manual) {
+        return
+    }
+    $State.Manual = $null
+    Set-TeamsManualStatus $null $null
+    Write-TeamsLog $Messages.LogManualEnded
+    $State.SentKey = $null
+    $State.RetryAfter = [datetime]::MinValue
+    Update-TrayDisplay
+}
+
+# Text for "Copy diagnostics" in the settings window, without the webhook ID
+function Get-TeamsDiagnostics {
+    $YesNo = { param($Value) if ($Value) { 'yes' } else { 'no' } }
+    $Webhook = '(not set)'
+    if ($Config.WebhookUrl) {
+        try {
+            $Uri = [Uri]$Config.WebhookUrl
+            $Webhook = '{0}://{1}/api/webhook/<hidden>' -f $Uri.Scheme, $Uri.Authority
+        }
+        catch {
+            $Webhook = '(invalid)'
+        }
+    }
+    $Manual = 'no'
+    if (Test-TeamsManualActive) {
+        $Manual = $State.Manual.Status + $(if ($State.Manual.Until -eq [datetime]::MaxValue) { ' (until reset)' } else { ' until ' + $State.Manual.Until.ToString('s') })
+    }
+    $Pause = 'no'
+    if ($State.PausedUntil) {
+        $Pause = if ($State.PausedUntil -eq [datetime]::MaxValue) { 'until resumed' } else { 'until ' + $State.PausedUntil.ToString('s') }
+    }
+    $Teams = Get-Process -Name 'ms-teams' -ErrorAction SilentlyContinue | Select-Object -First 1
+    $Os = [Environment]::OSVersion.Version
+    $Lines = @(
+        "Teams Busy Light $AppVersion (Windows tray app)"
+        "Windows:          $Os, PowerShell $($PSVersionTable.PSVersion), $([CultureInfo]::CurrentUICulture.Name)"
+        "Signature pin:    $(if ($SigningCertificateSha256) { 'set (in-app updates)' } else { 'none' })"
+        "Update available: $(if ($State.UpdateVersion) { $State.UpdateVersion } else { 'no' })"
+        ''
+        "Teams running:    $(& $YesNo $Teams)$(if ($Teams) { ', version ' + $Teams.FileVersion })"
+        "Teams log:        $(if ($State.LogMissing) { 'MISSING in ' + $TeamsLogFolder } else { 'ok' })"
+        "Teams language:   $(if ($State.Language) { $State.Language } else { '-' }) (setting $($Config.TeamsLanguage))"
+        "Teams status:     $(if ($State.Status) { $State.Status } else { '-' })"
+        "Teams activity:   $($State.TeamsActivity)"
+        "Manual status:    $Manual"
+        "Camera in use:    $(if ($State.Camera) { 'yes' } else { 'no' })"
+        "Microphone:       $(if ($State.Microphone) { 'in use by ' + ($State.MicrophoneApps -join ', ') } else { 'not in use' })"
+        "Other calls:      $(if ($Config.DetectOtherCalls) { 'detected' } else { 'ignored' })"
+        "Sent:             status $(Get-TeamsEffectiveStatus), activity $($State.Activity)"
+        ''
+        "Webhook:          $Webhook"
+        "Home networks:    $(if ($Config.HomeNetworks) { $Config.HomeNetworks } else { '(everywhere)' })"
+        "Current networks: $(@(Get-TeamsCurrentNetworks) -join ', ')"
+        "In home network:  $(& $YesNo (-not $State.Away))"
+        "Paused:           $Pause"
+        "Last sent:        $(if ($State.LastSent -ne [datetime]::MinValue) { $State.LastSent.ToString('s') } else { '-' })"
+        "Last error:       $(if ($State.SendError) { $State.SendError } else { '-' })"
+        "Intervals:        check $($Config.PollSeconds) s, keep-alive $($Config.HeartbeatSeconds) s"
+        "Autostart:        $(& $YesNo (Get-TeamsAutostart))"
+        ''
+        'Last log lines:'
+    )
+    if (Test-Path $LogPath) {
+        $Lines += @(Get-Content -Path $LogPath -Tail 40 -Encoding UTF8) -replace '/api/webhook/[^\s"'']+', '/api/webhook/<hidden>'
+    }
+    return ($Lines -join "`r`n") + "`r`n"
 }
 
 # Pauses sending from the tray menu; Home Assistant gets "offline" once
@@ -525,7 +687,7 @@ function Suspend-TeamsSending {
     }
     if ($TellHomeAssistant) {
         # Not awaited; the result is not needed
-        [void](Start-TeamsStatusSend -Client $Http -WebhookUrl $Config.WebhookUrl -Status 'offline' -Activity 'not_in_call')
+        [void](Start-TeamsStatusSend -Client $Http -WebhookUrl $Config.WebhookUrl -Status 'offline' -Activity 'not_in_call' -Extra $OfflineExtra)
     }
     $State.SendError = $null
     Update-TrayDisplay
@@ -535,7 +697,7 @@ function Resume-TeamsSending {
     $State.PausedUntil = $null
     Set-TeamsPause $null
     Write-TeamsLog $Messages.LogResumed
-    $State.SentStatus = $null
+    $State.SentKey = $null
     $State.RetryAfter = [datetime]::MinValue
     Update-TrayDisplay
 }
@@ -558,7 +720,7 @@ function Update-TeamsNetworkState {
     }
     else {
         Write-TeamsLog $Messages.LogHome
-        $State.SentStatus = $null
+        $State.SentKey = $null
         $State.RetryAfter = [datetime]::MinValue
     }
     Update-TrayDisplay
@@ -601,16 +763,19 @@ function Request-TeamsNewNetwork {
 }
 
 function Invoke-TeamsSend {
-    if (-not $Config.WebhookUrl -or $State.Away -or $State.PausedUntil -or $State.SendTask -or -not $State.Status) {
+    $Status = Get-TeamsEffectiveStatus
+    if (-not $Config.WebhookUrl -or $State.Away -or $State.PausedUntil -or $State.SendTask -or -not $Status) {
         return
     }
+    $Source = if (Test-TeamsManualActive) { 'manual' } else { 'teams' }
+    $Key = '{0}|{1}|{2}|{3}|{4}' -f $Status, $State.Activity, $State.Camera, $State.Microphone, $Source
     $Now = Get-Date
-    $Changed = ($State.Status -ne $State.SentStatus) -or ($State.Activity -ne $State.SentActivity)
+    $Changed = $Key -ne $State.SentKey
     $Due = ($Now - $State.LastSent).TotalSeconds -ge $Config.HeartbeatSeconds
     if (($Changed -or $Due) -and $Now -ge $State.RetryAfter) {
-        $State.SendStatus = $State.Status
-        $State.SendActivity = $State.Activity
-        $State.SendTask = Start-TeamsStatusSend -Client $Http -WebhookUrl $Config.WebhookUrl -Status $State.Status -Activity $State.Activity -Language $State.Language
+        $State.SendKey = $Key
+        $Extra = @{ camera = $State.Camera; microphone = $State.Microphone; source = $Source }
+        $State.SendTask = Start-TeamsStatusSend -Client $Http -WebhookUrl $Config.WebhookUrl -Status $Status -Activity $State.Activity -Language $State.Language -Extra $Extra
     }
 }
 
@@ -619,7 +784,7 @@ function Exit-TeamsBusyLight {
     # Tell Home Assistant right away instead of waiting for the timeout; not
     # when stopped for an update, the new version sends right after starting
     if ($Config.WebhookUrl -and -not $State.PausedUntil -and -not $State.Updating -and (Test-TeamsHomeNetwork $Config.HomeNetworks)) {
-        [void](Send-TeamsStatus -WebhookUrl $Config.WebhookUrl -Status 'offline' -Activity 'not_in_call' -TimeoutSeconds 3)
+        [void](Send-TeamsStatus -WebhookUrl $Config.WebhookUrl -Status 'offline' -Activity 'not_in_call' -Extra $OfflineExtra -TimeoutSeconds 3)
     }
     $Tray.Visible = $false
     $Tray.Dispose()
@@ -640,6 +805,9 @@ $Timer.Add_Tick({
         Complete-TeamsSend
         if ($State.PausedUntil -and $State.PausedUntil -ne [datetime]::MaxValue -and (Get-Date) -ge $State.PausedUntil) {
             Resume-TeamsSending
+        }
+        if ($State.Manual -and -not (Test-TeamsManualActive)) {
+            Clear-TeamsManualState
         }
         if (((Get-Date) - $State.LastPoll).TotalSeconds -ge $Config.PollSeconds) {
             $State.LastPoll = Get-Date
@@ -664,6 +832,7 @@ $LogItem.Add_Click({
 })
 $ExitItem.Add_Click({ Exit-TeamsBusyLight })
 $ResumeItem.Add_Click({ Resume-TeamsSending })
+$UseTeamsItem.Add_Click({ Clear-TeamsManualState })
 $UpdateItem.Add_Click({ Invoke-TeamsUpdateAction })
 $Tray.Add_BalloonTipClicked({ Invoke-TeamsUpdateAction })
 $Tray.Add_DoubleClick({ Open-TeamsSettings })

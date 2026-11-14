@@ -31,6 +31,14 @@
     }
   },
   "entity": {
+    "binary_sensor": {
+      "camera": {
+        "name": "Camera"
+      },
+      "microphone": {
+        "name": "Microphone"
+      }
+    },
     "sensor": {
       "status": {
         "name": "Status",
@@ -55,6 +63,23 @@
           },
           "last_seen": {
             "name": "Zuletzt gemeldet"
+          },
+          "source": {
+            "name": "Quelle",
+            "state": {
+              "teams": "Teams",
+              "manual": "Manuell gesetzt"
+            }
+          },
+          "app_version": {
+            "name": "App-Version"
+          },
+          "platform": {
+            "name": "Plattform",
+            "state": {
+              "windows": "Windows",
+              "macos": "macOS"
+            }
           }
         }
       },
@@ -67,6 +92,12 @@
           "outgoing_call": "Ausgehender Anruf"
         }
       }
+    }
+  },
+  "issues": {
+    "outdated_app": {
+      "title": "Teams-Busy-Light-App auf {computer} ist veraltet",
+      "description": "Die Teams-Busy-Light-App auf {computer} hat Version {app_version}, die Integration Version {integration_version}. Aktualisiere die App: im Menü „Version … installieren“ wählen oder den Installer des neuesten Releases ausführen (Windows: Install.cmd, macOS: install.sh). Dieser Hinweis verschwindet, sobald sich die aktualisierte App meldet."
     }
   }
 }

@@ -29,6 +29,18 @@ ACTIVITY_OPTIONS = [
 ]
 
 
+SOURCE_TEAMS = "teams"
+SOURCE_MANUAL = "manual"
+SOURCE_OPTIONS = [SOURCE_TEAMS, SOURCE_MANUAL]
+
+PLATFORM_OPTIONS = ["windows", "macos"]
+
+
+def issue_id_outdated_app(entry_id: str) -> str:
+    """Return the repair issue ID for an outdated app of a config entry."""
+    return f"outdated_app_{entry_id}"
+
+
 def signal_update(entry_id: str) -> str:
     """Return the dispatcher signal for updates of a config entry."""
     return f"{DOMAIN}_update_{entry_id}"

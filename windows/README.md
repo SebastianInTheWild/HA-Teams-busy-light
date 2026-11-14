@@ -112,12 +112,21 @@ Open **Settings…** in the menu of the tray icon or **Teams Busy Light** in the
 | Language of the Teams app | Detect automatically | German or English, if the detection fails |
 | Send only in these networks | empty | Optional list of networks (e.g. `192.168.1.0/24, 10.0.0.0/8`); outside them nothing is sent, not even through an externally reachable webhook URL. **Add current network** fills in the network the PC is in. Empty = send everywhere |
 | Ask whether to add a new network | on | While networks are set: asks whether to add a network the PC is in that is not in the list yet ("No" is remembered, "Cancel" stops asking) |
+| Also detect calls in other apps | on | Reports a call while any app uses the microphone (Zoom, Webex, a browser …). Camera and microphone are sent to Home Assistant in any case (from the Windows privacy settings, no permission needed) |
 | Start when I sign in to Windows | on | Start the app at sign-in |
 | Check for updates daily | on | Shows a menu entry and a notification when a new release is available; after confirmation the app downloads, checks and installs it |
 
 **Pause sending** in the menu of the tray icon stops sending for 1 hour, 8 hours, 1 day or
 until **Resume sending**; Home Assistant gets `offline` once. The pause is kept when the app
 restarts. The settings window shows the installed version.
+
+**Set status** in the menu sends a status of your choice (Available, Busy, Do not disturb, Be
+right back, Away) instead of the Teams status for 30 minutes, 1 or 2 hours or until **Use Teams
+status again**, e.g. while you work without Teams or call from your phone. It is kept when the
+app restarts; Home Assistant shows `source: manual` on the status sensor.
+
+**Copy diagnostics** in the settings window copies version, detection, network, sending and
+the last log lines (without the webhook ID) for a bug report.
 
 ## Verification
 

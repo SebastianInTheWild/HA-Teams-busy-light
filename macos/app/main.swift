@@ -34,6 +34,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private let updateItem = NSMenuItem(title: "", action: #selector(updateClicked), keyEquivalent: "")
     private let pauseItem = NSMenuItem(title: L.menuPause, action: nil, keyEquivalent: "")
     private let resumeItem = NSMenuItem(title: L.menuResume, action: #selector(resumeSending), keyEquivalent: "")
+    private let setStatusItem = NSMenuItem(title: L.menuSetStatus, action: nil, keyEquivalent: "")
+    private let useTeamsItem = NSMenuItem(title: L.menuUseTeamsStatus, action: #selector(useTeamsStatus), keyEquivalent: "")
+    /// Statuses offered under "Set Status"
+    private static let manualStatuses = ["available", "busy", "do_not_disturb", "be_right_back", "away"]
     private let pauseTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
@@ -141,6 +145,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         accessItem.target = self
         menu.addItem(accessItem)
         menu.addItem(.separator())
+        let statusMenu = NSMenu()
+        for (index, status) in Self.manualStatuses.enumerated() {
+            let durations = NSMenu()
+            for (title, seconds) in [(L.manualFor30Minutes, 1800), (L.manualForHour, 3600), (L.manualFor2Hours, 7200), (L.manualUntilReset, 0)] {
+                let item = NSMenuItem(title: title, action: #selector(setManualStatus(_:)), keyEquivalent: "")
+                item.target = self
+                // Status index and seconds in one tag
+                item.tag = index * 1_000_000 + seconds
+                durations.addItem(item)
+            }
+            let item = NSMenuItem(title: L.statusName(status), action: nil, keyEquivalent: "")
+            item.submenu = durations
+            statusMenu.addItem(item)
+        }
+        setStatusItem.submenu = statusMenu
+        menu.addItem(setStatusItem)
+        useTeamsItem.target = self
+        menu.addItem(useTeamsItem)
         let pauseMenu = NSMenu()
         for (title, seconds) in [(L.pauseHour, 3600.0), (L.pause8Hours, 8 * 3600.0), (L.pauseDay, 24 * 3600.0), (L.pauseAlways, 0)] {
             let item = NSMenuItem(title: title, action: #selector(pauseSending(_:)), keyEquivalent: "")
@@ -164,9 +186,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     /// Updates the icon and the menu
     private func refresh() {
-        let statusName = L.statusName(monitor.status)
-        statusLine.title = L.menuStatus(statusName)
-        activityLine.title = L.menuActivity(L.activityName(inCall: monitor.inCall))
+        let statusName = L.statusName(monitor.effectiveStatus)
+        if monitor.manualActive, let until = monitor.manual?.until {
+            statusLine.title = L.menuManualStatus(statusName, until: until == .distantFuture ? nil : pauseTimeFormatter.string(from: until))
+        } else {
+            statusLine.title = L.menuStatus(statusName)
+        }
+        if monitor.inCall && !monitor.teamsInCall {
+            activityLine.title = L.menuOtherCall(monitor.microphoneUsers.isEmpty ? "?" : monitor.microphoneUsers.joined(separator: ", "))
+        } else {
+            activityLine.title = L.menuActivity(L.activityName(inCall: monitor.inCall))
+        }
+        useTeamsItem.isHidden = !monitor.manualActive
         connectionLine.toolTip = nil
         if !settings.isConfigured {
             connectionLine.title = L.menuNotConfigured
@@ -223,7 +254,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         var dot: NSColor?
         if monitor.inCall {
             dot = Self.dotColors["busy"]
-        } else if let status = monitor.status {
+        } else if let status = monitor.effectiveStatus {
             switch status {
             case "available": dot = Self.dotColors["available"]
             case "be_right_back", "away": dot = Self.dotColors["away"]
@@ -267,7 +298,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             settingsModel = model
             let view = SettingsView(
                 model: model,
-                currentStatus: { [weak self] in (self?.monitor.status, self?.monitor.inCall ?? false) },
+                currentStatus: { [weak self] in (self?.monitor.effectiveStatus, self?.monitor.inCall ?? false) },
+                diagnostics: { [weak self] in self.map { Diagnostics.text(monitor: $0.monitor, settings: $0.settings, updateChecker: $0.updateChecker) } ?? "" },
                 onSave: { [weak self] settings, autostart in self?.apply(settings, autostart: autostart) },
                 onClose: { [weak self] in self?.settingsWindow?.close() },
                 onGrantAccess: { [weak self] in self?.openAccessSettings() },
@@ -319,6 +351,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     @objc private func resumeSending() {
         monitor.resumeSending()
+    }
+
+    /// Tag = status index * 1,000,000 + seconds (0 = until reset)
+    @objc private func setManualStatus(_ sender: NSMenuItem) {
+        let status = Self.manualStatuses[sender.tag / 1_000_000]
+        let seconds = sender.tag % 1_000_000
+        monitor.setManualStatus(status, until: seconds == 0 ? .distantFuture : Date().addingTimeInterval(TimeInterval(seconds)))
+    }
+
+    @objc private func useTeamsStatus() {
+        monitor.clearManualStatus()
     }
 
     private var askingNetwork = false
