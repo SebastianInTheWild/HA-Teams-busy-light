@@ -4,6 +4,38 @@ Arbeitsnotiz für den Branch `call-detection` (ab `main` = 1.4.0, begonnen 13./1
 **Vor dem Merge nach `main` löschen.** Version (`manifest.json`) und Release erst auf
 Anweisung des Users; CHANGELOG unter „Unreleased“ ist gepflegt. Geplant: 1.5.0.
 
+## Stand 14.11.2026 – weiter am Montag, 16.11.2026
+
+Letzter Commit: `86a47b3` (gepusht). User will 1.5.0 releasen, sobald die Tests durch sind.
+Mac: getestet bis auf die Punkte unten. Windows: per RDP getestet (keine echte Kamera/Mikro).
+HA: noch **nichts** getestet.
+
+**Reihenfolge am Montag:**
+1. **HA-Test** (wichtigster offener Block, geht per HACS an alle): Integration aus dem
+   Branch nach `/config/custom_components/teams_status` kopieren, HA neu starten, dann
+   „Testplan Home Assistant“ unten. Auf dem HA heißen die bestehenden Entities
+   `sensor.teams_sebastian_windows_{status,activity}` und `sensor.teams_mac_{status,activity}`
+   – prüfen, wie die neuen Binärsensoren tatsächlich heißen (Testplan nennt
+   `binary_sensor.teams_camera`, vermutlich mit Gerätenamen davor). Automation
+   `automation.teams_busy_light` ist aktuell aus.
+2. **Windows neu installieren** (`windows\Install.cmd`) – die laufende Installation hat den
+   „ohne .exe“-Fix aus `86a47b3` noch nicht. Dann offene Windows-Punkte (per RDP möglich):
+   - 6: eigener Status wird nach Fortsetzen wirklich gesendet (HA `…_status`, `source: manual`);
+     „Bis ich ihn zurücksetze“ + Neustart bleibt; Ablauf von selbst (`manual-status.txt`).
+   - 8: Beenden → `offline` mit Kamera/Mikro aus in HA.
+   - 9: CPU-Last der Tray-App (Task-Manager, einige Minuten).
+   - Pause ist aufgehoben (16:08); vor Tests prüfen, dass `pause.txt` nicht wieder gesetzt ist.
+3. **Mac** (optional vor Release): Einstellungen mit Tabs ansehen (User), Teams-Anruf,
+   Schalter „andere Anrufe“ aus, „Hey Siri“.
+4. **Nach dem Release möglich:** echte Kamera/Mikrofon an Windows (vor Ort, nicht per RDP),
+   Store-App-Pfad (z. B. Windows-Kamera-App).
+
+**Release 1.5.0 (wenn der User es sagt):** Version in `manifest.json` auf 1.5.0, CHANGELOG
+„Unreleased“ → 1.5.0 (Einträge aus `86a47b3` ergänzen: Desktop-Apps ohne .exe,
+Diagnose-Beschriftungen, Einstellungen in Tabs), diese Datei löschen, nach `main` mergen,
+Release wie bei 1.4.0 (Windows-Download per bash hochladen, signiert). Danach auf dem HA
+über HACS auf das Release 1.5.0 zurück und den Reparatur-Hinweis mit einer alten App prüfen.
+
 ## Entscheidungen (mit dem User, 13.11.2026)
 
 - Gewünscht: (1) Teams-Mikro/Kamera, (2) Anrufe anderer Apps, (3) eigenen Status im Menü
@@ -142,6 +174,10 @@ Ergebnisse 14.11.2026:
   Einträge danach gelöscht. Store-App-Pfad (ohne `NonPackaged`) nicht simuliert.
   Desktop-Apps jetzt ohne „.exe“ (Wunsch User): „FakeZoom.EXE“ → „FakeZoom“ ✅.
 - 6 Status festlegen (Nicht stören, 30 Min) ✅ geloggt; Senden nicht geprüft (Pause aktiv).
+  „Wieder Teams-Status verwenden“ ✅ (16:08 „Manual status ended, using the Teams status“).
+  Offen: Senden, „Bis ich ihn zurücksetze“ + Neustart, Ablauf von selbst.
+- Hinweis: Datumsangaben im Log („until 11/14/2026 4:36 PM“) im US-Format (`ToString('g')`,
+  wie schon bei der Pause) – kosmetisch, nicht geändert.
 - 7 Diagnose ✅ (Webhook-ID entfernt). Beschriftungen geklärt (Mac und Windows):
   „Sent:“ → „Effective:“ (zeigt, was gesendet würde, auch bei Pause), „Other calls:
   detected/ignored“ → „on/off“.
