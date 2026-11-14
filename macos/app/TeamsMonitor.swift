@@ -268,6 +268,7 @@ final class TeamsMonitor {
     private var retryAfter = Date.distantPast
     private var unknownLogged: String?
     private var accessLogged = false
+    private var loggedStatus: String?
     private var paused = false
 
     init(settings: AppSettings) {
@@ -435,7 +436,12 @@ final class TeamsMonitor {
         }
 
         if changed {
-            Log.write("Status: \(effectiveStatus ?? "none")\(manualActive ? " (manual)" : ""), activity: \(inCall ? "in_call" : "not_in_call")")
+            // Only when status or activity changed, not for camera/microphone alone
+            let line = "Status: \(effectiveStatus ?? "none")\(manualActive ? " (manual)" : ""), activity: \(inCall ? "in_call" : "not_in_call")"
+            if line != loggedStatus {
+                Log.write(line)
+                loggedStatus = line
+            }
             onChange?()
         }
         sendIfNeeded()

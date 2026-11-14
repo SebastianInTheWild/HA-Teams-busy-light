@@ -90,6 +90,14 @@ App läuft im Test aus `~/Applications`; Webhook ggf. auf echten HA zurückstell
 6. Diagnose kopieren → Text einfügen: keine Webhook-ID, Werte plausibel.
 7. Einstellungsfenster: Layout ok, nichts abgeschnitten.
 
+Ergebnisse 14.11.2026:
+- 1 Kamera (Photo Booth) an/aus ✅ sofort gemeldet (`camera: true/false`). Mikrofon blieb aus –
+  korrekt, Photo Booth nutzt es erst bei Videoaufnahme. **Mikrofon noch testen** (Sprachmemos).
+- 5 eigener Status 30 Min ✅ (`source: manual`), „Wieder Teams-Status verwenden“ ✅.
+- 6 Diagnose ✅ (Webhook-ID entfernt, Werte plausibel).
+- Behoben: Bei Kamera-/Mikrofonwechsel stand zusätzlich eine unveränderte „Status: …“-Zeile
+  im Log; jetzt nur bei geänderter Status-/Aktivitätszeile (Mac und Windows).
+
 ## Testplan Windows (Ergebnisse eintragen)
 
 Vorbereitung: Branch `call-detection` holen, `windows\Install.cmd` (Update der Installation).

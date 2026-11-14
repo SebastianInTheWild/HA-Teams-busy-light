@@ -84,6 +84,7 @@ $State = @{
     # What was sent last (status, activity, camera, microphone, source)
     SentKey = $null
     SendKey = $null
+    LoggedStatus = $null
     LastSent = [datetime]::MinValue
     LastPoll = [datetime]::MinValue
     RetryAfter = [datetime]::MinValue
@@ -569,7 +570,12 @@ function Update-TeamsState {
         $Changed = $true
     }
     if ($Changed) {
-        Write-TeamsLog ($Messages.LogStatus -f (Get-TeamsEffectiveStatus), $State.Activity)
+        # Only when status or activity changed, not for camera/microphone alone
+        $Line = $Messages.LogStatus -f (Get-TeamsEffectiveStatus), $State.Activity
+        if ($Line -ne $State.LoggedStatus) {
+            Write-TeamsLog $Line
+            $State.LoggedStatus = $Line
+        }
         Update-TrayDisplay
     }
 }
