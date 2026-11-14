@@ -130,6 +130,24 @@ Vorbereitung: Branch `call-detection` holen, `windows\Install.cmd` (Update der I
    Kamera/Mikro aus.
 9. CPU-Last der Tray-App bei 2-s-Prüfung unverändert niedrig (Registry wird jedes Mal gelesen).
 
+Ergebnisse 14.11.2026:
+- Installation aus dem Branch ✅ (Dateien identisch mit dem Branch).
+- 1 Einstellungen (alter Stand **ohne** Tabs, `4951b61`): Checkbox mit Hinweis, „Diagnose
+  kopieren“ neben „Test senden“, Layout ✅.
+- 1 Tab-Version (`fdd6e63`) installiert, Einstellungen mit Tabs sehen gut aus ✅ (User).
+- 2–5 (Kamera/Mikrofon) mit echten Geräten offen: User nur per RDP am Windows-Rechner.
+  Ersatz: künstlicher Eintrag `ConsentStore\{webcam,microphone}\NonPackaged\C:#Test#FakeCall.exe`
+  (Start gesetzt, Stop = 0) → Log „Camera in use: FakeCall.exe“, „Microphone in use:
+  FakeCall.exe“, `activity: in_call` in HA ✅; Stop gesetzt → beides aus, `not_in_call` ✅.
+  Einträge danach gelöscht. Store-App-Pfad (ohne `NonPackaged`) nicht simuliert.
+  Desktop-Apps jetzt ohne „.exe“ (Wunsch User): „FakeZoom.EXE“ → „FakeZoom“ ✅.
+- 6 Status festlegen (Nicht stören, 30 Min) ✅ geloggt; Senden nicht geprüft (Pause aktiv).
+- 7 Diagnose ✅ (Webhook-ID entfernt). Beschriftungen geklärt (Mac und Windows):
+  „Sent:“ → „Effective:“ (zeigt, was gesendet würde, auch bei Pause), „Other calls:
+  detected/ignored“ → „on/off“.
+- 8 Pause + eigener Status: Pause gewinnt, nichts gesendet ✅. Beenden → `offline` offen.
+- `offline` trotz laufendem Teams korrekt: in Teams „Offline anzeigen“ gesetzt.
+
 ## Testplan Home Assistant
 
 Neue Integration auf den HA bringen: `custom_components/teams_status` aus dem Branch per

@@ -395,11 +395,11 @@ function Get-TeamsDeviceUsers {
             if (-not $Key) { continue }
             try {
                 if ($Name -eq 'NonPackaged') {
-                    # Desktop apps: the path with # instead of \, e.g. C:#Program Files#Zoom#bin#Zoom.exe
+                    # Desktop apps: the path with # instead of \, e.g. C:#Program Files#Zoom#bin#Zoom.exe -> Zoom
                     foreach ($AppName in $Key.GetSubKeyNames()) {
                         $AppKey = $Key.OpenSubKey($AppName)
                         if (-not $AppKey) { continue }
-                        try { & $Check $AppKey ($AppName -split '#')[-1] } finally { $AppKey.Close() }
+                        try { & $Check $AppKey (($AppName -split '#')[-1] -replace '\.exe$', '') } finally { $AppKey.Close() }
                     }
                 }
                 else {

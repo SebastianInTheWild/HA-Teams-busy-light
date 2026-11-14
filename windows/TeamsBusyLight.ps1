@@ -657,8 +657,8 @@ function Get-TeamsDiagnostics {
         "Manual status:    $Manual"
         "Camera in use:    $(if ($State.Camera) { 'yes' } else { 'no' })"
         "Microphone:       $(if ($State.Microphone) { 'in use by ' + ($State.MicrophoneApps -join ', ') } else { 'not in use' })"
-        "Other calls:      $(if ($Config.DetectOtherCalls) { 'detected' } else { 'ignored' })"
-        "Sent:             status $(Get-TeamsEffectiveStatus), activity $($State.Activity)"
+        "Other calls:      $(if ($Config.DetectOtherCalls) { 'on' } else { 'off' })"
+        "Effective:        status $(Get-TeamsEffectiveStatus), activity $($State.Activity)"
         ''
         "Webhook:          $Webhook"
         "Home networks:    $(if ($Config.HomeNetworks) { $Config.HomeNetworks } else { '(everywhere)' })"
