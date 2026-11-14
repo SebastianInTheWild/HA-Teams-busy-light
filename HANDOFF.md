@@ -92,7 +92,10 @@ App läuft im Test aus `~/Applications`; Webhook ggf. auf echten HA zurückstell
 
 Ergebnisse 14.11.2026:
 - 1 Kamera (Photo Booth) an/aus ✅ sofort gemeldet (`camera: true/false`). Mikrofon blieb aus –
-  korrekt, Photo Booth nutzt es erst bei Videoaufnahme. **Mikrofon noch testen** (Sprachmemos).
+  korrekt, Photo Booth nutzt es erst bei Videoaufnahme. Mikrofon ✅: „Sprachmemos“ und
+  „Microsoft Teams ModuleHost“ (Teams-Vorschau/Gerätetest, kein Teams-Anruf) erkannt,
+  `activity: in_call`, danach wieder aus; Kamera auch nach dem Ruhezustand ✅.
+  Nicht geprüft: „Hey Siri“ (2–4), Teams-Anruf (2), Schalter aus (3), Layout (7).
 - 5 eigener Status 30 Min ✅ (`source: manual`), „Wieder Teams-Status verwenden“ ✅.
 - 6 Diagnose ✅ (Webhook-ID entfernt, Werte plausibel).
 - Behoben: Bei Kamera-/Mikrofonwechsel stand zusätzlich eine unveränderte „Status: …“-Zeile
