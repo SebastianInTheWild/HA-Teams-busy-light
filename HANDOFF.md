@@ -107,9 +107,14 @@ Ergebnisse 14.11.2026:
 ## Testplan Windows (Ergebnisse eintragen)
 
 Vorbereitung: Branch `call-detection` holen, `windows\Install.cmd` (Update der Installation).
-1. Einstellungen: neue Checkbox mit Hinweis, Knopf „Diagnose kopieren“ neben „Test senden“;
-   Layout bei 100/125/150 % (Fenster ist länger geworden – passt es noch auf den Bildschirm?).
-   Im Installer **kein** Diagnose-Knopf.
+1. Einstellungen jetzt in Tabs wie am Mac (`TabControl`, auf dem Mac nicht darstellbar,
+   **ungetestet**): „Allgemein“ (Webhook + Test, Autostart, Updates; im Installer zusätzlich
+   Hosts-Eintrag), „Erkennung“ (andere Anrufe, Intervalle, Teams-Sprache, Diagnose kopieren),
+   „Netze“. Prüfen: nichts rechts abgeschnitten (Seitenbreite fest = Tab-Breite − 8 px),
+   Höhe passt zum höchsten Tab, Seitenhintergrund ok, bei 100/125/150 %. Fehler beim
+   Sichern springen auf den Tab (ungültige URL → Allgemein, ungültiges Netz → Netze).
+   Installer: Hinweiskarten über den Tabs, **kein** Diagnose-Knopf. Test senden, Aktuelles
+   Netz hinzufügen, Diagnose kopieren funktionieren.
 2. Kamera-App öffnen → Log „Kamera in Benutzung: …“ (App-Name plausibel? Store-App z. B.
    `Microsoft.WindowsCamera`), Sensor in HA an. Schließen → aus.
 3. Mikrofon: Sprachrekorder oder Zoom/Webex/Browser (z. B. Teams im Browser, Meet) →

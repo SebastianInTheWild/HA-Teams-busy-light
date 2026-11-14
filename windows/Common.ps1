@@ -908,8 +908,36 @@ function Show-TeamsSettingsDialog {
         $Y += 4
     }
 
+    # Tabs like the macOS app: General, Detection, Networks. New settings go
+    # into the fitting tab, so the window keeps its height.
+    $Tabs = New-Object System.Windows.Forms.TabControl
+    $Tabs.Location = New-Object System.Drawing.Point($Margin, $Y)
+    $Tabs.Size = New-Object System.Drawing.Size($InnerWidth, 400)
+    $Tabs.Padding = New-Object System.Drawing.Point(16, 5)
+    $Form.Controls.Add($Tabs)
+
+    $NewPage = {
+        param([string]$Text)
+        $Page = New-Object System.Windows.Forms.TabPage
+        $Page.Text = $Text
+        $Page.UseVisualStyleBackColor = $true
+        [void]$Tabs.TabPages.Add($Page)
+        return $Page
+    }
+    $GeneralPage = & $NewPage $Messages.TabGeneral
+    $DetectionPage = & $NewPage $Messages.TabDetection
+    $NetworksPage = & $NewPage $Messages.TabNetworks
+
+    # Positions inside a tab page
+    $PageMargin = 16
+    # A tab page is about 8 px narrower than the TabControl (border); the
+    # DisplayRectangle is not reliable before the window is shown
+    $PageWidth = $InnerWidth - 8 - 2 * $PageMargin
+    $ColumnWidth = [int](($PageWidth - 16) / 2)
+    $SecondColumn = $PageMargin + $ColumnWidth + 16
+
     $AddLabel = {
-        param([string]$Text, [int]$X, [int]$Top, [int]$LabelWidth, [switch]$Hint)
+        param([System.Windows.Forms.Control]$Parent, [string]$Text, [int]$X, [int]$Top, [int]$LabelWidth, [switch]$Hint)
         $Label = New-Object System.Windows.Forms.Label
         $Label.Location = New-Object System.Drawing.Point($X, $Top)
         $Label.Text = $Text
@@ -923,160 +951,152 @@ function Show-TeamsSettingsDialog {
             $Label.Font = New-TeamsFont 9 -Bold
             $Label.ForeColor = $TextColor
         }
-        $Form.Controls.Add($Label)
+        $Parent.Controls.Add($Label)
         return $Label
     }
 
-    [void](& $AddLabel $Messages.Webhook $Margin $Y $InnerWidth)
-    $Y += 24
-    $WebhookInput = New-Object System.Windows.Forms.TextBox
-    $WebhookInput.Location = New-Object System.Drawing.Point($Margin, $Y)
-    $WebhookInput.Size = New-Object System.Drawing.Size($InnerWidth, 27)
-    $WebhookInput.Font = New-TeamsFont 10
-    $WebhookInput.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
-    $WebhookInput.Text = $Settings.WebhookUrl
-    $Form.Controls.Add($WebhookInput)
-    $Y = $WebhookInput.Bottom + 4
-    $Hint = & $AddLabel $Messages.WebhookHint $Margin $Y $InnerWidth -Hint
-    $Y = $Hint.Bottom + 16
+    $AddCheckBox = {
+        param([System.Windows.Forms.Control]$Parent, [string]$Text, [int]$Top, [bool]$Checked)
+        $CheckBox = New-Object System.Windows.Forms.CheckBox
+        $CheckBox.Location = New-Object System.Drawing.Point($PageMargin, $Top)
+        $CheckBox.Size = New-Object System.Drawing.Size($PageWidth, 24)
+        $CheckBox.Text = $Text
+        $CheckBox.Checked = $Checked
+        $Parent.Controls.Add($CheckBox)
+        return $CheckBox
+    }
 
-    $ColumnWidth = [int](($InnerWidth - 16) / 2)
-    $SecondColumn = $Margin + $ColumnWidth + 16
+    $AddButton = {
+        param([System.Windows.Forms.Control]$Parent, [string]$Text, [int]$X, [int]$Top, [int]$ButtonWidth)
+        $Button = New-Object System.Windows.Forms.Button
+        $Button.Location = New-Object System.Drawing.Point($X, $Top)
+        $Button.Size = New-Object System.Drawing.Size($ButtonWidth, 32)
+        $Button.Text = $Text
+        $Button.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+        $Button.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(205, 213, 224)
+        $Button.BackColor = [System.Drawing.Color]::White
+        $Button.ForeColor = [System.Drawing.Color]::FromArgb(45, 80, 145)
+        $Parent.Controls.Add($Button)
+        return $Button
+    }
+
+    $AddResult = {
+        param([System.Windows.Forms.Control]$Parent, [int]$X, [int]$Top)
+        $Result = New-Object System.Windows.Forms.Label
+        $Result.Location = New-Object System.Drawing.Point($X, ($Top + 2))
+        $Result.Size = New-Object System.Drawing.Size(($PageMargin + $PageWidth - $X), 30)
+        $Result.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
+        $Result.AutoEllipsis = $true
+        $Parent.Controls.Add($Result)
+        return $Result
+    }
 
     $AddNumber = {
-        param([int]$X, [int]$Top, [int]$Value, [int]$Minimum, [int]$Maximum)
+        param([System.Windows.Forms.Control]$Parent, [int]$X, [int]$Top, [int]$Value, [int]$Minimum, [int]$Maximum)
         $Number = New-Object System.Windows.Forms.NumericUpDown
         $Number.Location = New-Object System.Drawing.Point($X, $Top)
         $Number.Size = New-Object System.Drawing.Size(90, 27)
         $Number.Minimum = $Minimum
         $Number.Maximum = $Maximum
         $Number.Value = [Math]::Min([Math]::Max($Value, $Minimum), $Maximum)
-        $Form.Controls.Add($Number)
+        $Parent.Controls.Add($Number)
         return $Number
     }
 
-    [void](& $AddLabel $Messages.Heartbeat $Margin $Y $ColumnWidth)
-    [void](& $AddLabel $Messages.Poll $SecondColumn $Y $ColumnWidth)
+    # --- General: webhook with test, autostart, updates (installer: hosts file)
+    $Y = 16
+    [void](& $AddLabel $GeneralPage $Messages.Webhook $PageMargin $Y $PageWidth)
     $Y += 24
-    $HeartbeatInput = & $AddNumber $Margin $Y $Settings.HeartbeatSeconds 10 3600
-    $PollInput = & $AddNumber $SecondColumn $Y $Settings.PollSeconds 1 60
-    $Y = $HeartbeatInput.Bottom + 4
-    $Hint = & $AddLabel $Messages.HeartbeatHint $Margin $Y $InnerWidth -Hint
+    $WebhookInput = New-Object System.Windows.Forms.TextBox
+    $WebhookInput.Location = New-Object System.Drawing.Point($PageMargin, $Y)
+    $WebhookInput.Size = New-Object System.Drawing.Size($PageWidth, 27)
+    $WebhookInput.Font = New-TeamsFont 10
+    $WebhookInput.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+    $WebhookInput.Text = $Settings.WebhookUrl
+    $GeneralPage.Controls.Add($WebhookInput)
+    $Y = $WebhookInput.Bottom + 4
+    $Hint = & $AddLabel $GeneralPage $Messages.WebhookHint $PageMargin $Y $PageWidth -Hint
+    $Y = $Hint.Bottom + 10
+    $TestButton = & $AddButton $GeneralPage $Messages.Test $PageMargin $Y 130
+    $TestResult = & $AddResult $GeneralPage ($PageMargin + 142) $Y
+    $Y = $TestButton.Bottom + 18
+
+    $AutostartInput = & $AddCheckBox $GeneralPage $Messages.Autostart $Y $Autostart
+    $Y = $AutostartInput.Bottom + 2
+    $UpdatesInput = & $AddCheckBox $GeneralPage $Messages.CheckForUpdates $Y ([bool]$Settings.CheckForUpdates)
+    $Y = $UpdatesInput.Bottom + 6
+
+    $HostsInput = $null
+    if ($Install) {
+        $HostsInput = & $AddCheckBox $GeneralPage $Messages.InstallHosts $Y $false
+        $Y = $HostsInput.Bottom
+        $Hint = & $AddLabel $GeneralPage $Messages.InstallHostsHint ($PageMargin + 18) $Y ($PageWidth - 18) -Hint
+        $Y = $Hint.Bottom + 6
+    }
+    $PageHeights = @($Y + 10)
+
+    # --- Detection: other calls, intervals, Teams language, diagnostics
+    $Y = 16
+    $OtherCallsInput = & $AddCheckBox $DetectionPage $Messages.DetectOtherCalls $Y ([bool]$Settings.DetectOtherCalls)
+    $Y = $OtherCallsInput.Bottom
+    $Hint = & $AddLabel $DetectionPage $Messages.DetectOtherCallsHint ($PageMargin + 18) $Y ($PageWidth - 18) -Hint
     $Y = $Hint.Bottom + 16
 
-    [void](& $AddLabel $Messages.TeamsLanguage $Margin $Y $InnerWidth)
+    [void](& $AddLabel $DetectionPage $Messages.Heartbeat $PageMargin $Y $ColumnWidth)
+    [void](& $AddLabel $DetectionPage $Messages.Poll $SecondColumn $Y $ColumnWidth)
+    $Y += 24
+    $HeartbeatInput = & $AddNumber $DetectionPage $PageMargin $Y $Settings.HeartbeatSeconds 10 3600
+    $PollInput = & $AddNumber $DetectionPage $SecondColumn $Y $Settings.PollSeconds 1 60
+    $Y = $HeartbeatInput.Bottom + 4
+    $Hint = & $AddLabel $DetectionPage $Messages.HeartbeatHint $PageMargin $Y $PageWidth -Hint
+    $Y = $Hint.Bottom + 16
+
+    [void](& $AddLabel $DetectionPage $Messages.TeamsLanguage $PageMargin $Y $PageWidth)
     $Y += 24
     $LanguageInput = New-Object System.Windows.Forms.ComboBox
-    $LanguageInput.Location = New-Object System.Drawing.Point($Margin, $Y)
+    $LanguageInput.Location = New-Object System.Drawing.Point($PageMargin, $Y)
     $LanguageInput.Size = New-Object System.Drawing.Size($ColumnWidth, 27)
     $LanguageInput.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
     $LanguageCodes = @('auto', 'de', 'en')
     [void]$LanguageInput.Items.AddRange(@($Messages.TeamsLanguageAuto, $Messages.TeamsLanguageDe, $Messages.TeamsLanguageEn))
     $LanguageInput.SelectedIndex = [Math]::Max([array]::IndexOf($LanguageCodes, [string]$Settings.TeamsLanguage), 0)
-    $Form.Controls.Add($LanguageInput)
+    $DetectionPage.Controls.Add($LanguageInput)
     $Y = $LanguageInput.Bottom + 16
 
-    [void](& $AddLabel $Messages.HomeNetworks $Margin $Y $InnerWidth)
+    $DiagnosticsButton = $null
+    $DiagnosticsResult = $null
+    if ($Diagnostics) {
+        $DiagnosticsButton = & $AddButton $DetectionPage $Messages.CopyDiagnostics $PageMargin $Y 170
+        $DiagnosticsResult = & $AddResult $DetectionPage ($PageMargin + 182) $Y
+        $Y = $DiagnosticsButton.Bottom + 4
+        $Hint = & $AddLabel $DetectionPage $Messages.DiagnosticsHint $PageMargin $Y $PageWidth -Hint
+        $Y = $Hint.Bottom + 6
+    }
+    $PageHeights += $Y + 10
+
+    # --- Networks: send only in these networks
+    $Y = 16
+    [void](& $AddLabel $NetworksPage $Messages.HomeNetworks $PageMargin $Y $PageWidth)
     $Y += 24
     $NetworkButtonWidth = 190
     $NetworksInput = New-Object System.Windows.Forms.TextBox
-    $NetworksInput.Location = New-Object System.Drawing.Point($Margin, $Y)
-    $NetworksInput.Size = New-Object System.Drawing.Size(($InnerWidth - $NetworkButtonWidth - 10), 27)
+    $NetworksInput.Location = New-Object System.Drawing.Point($PageMargin, $Y)
+    $NetworksInput.Size = New-Object System.Drawing.Size(($PageWidth - $NetworkButtonWidth - 10), 27)
     $NetworksInput.Font = New-TeamsFont 10
     $NetworksInput.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
     $NetworksInput.Text = [string]$Settings.HomeNetworks
-    $Form.Controls.Add($NetworksInput)
-    $NetworkButton = New-Object System.Windows.Forms.Button
-    $NetworkButton.Location = New-Object System.Drawing.Point(($Margin + $InnerWidth - $NetworkButtonWidth), ($Y - 1))
-    $NetworkButton.Size = New-Object System.Drawing.Size($NetworkButtonWidth, 29)
-    $NetworkButton.Text = $Messages.AddCurrentNetwork
-    $NetworkButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
-    $NetworkButton.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(205, 213, 224)
-    $NetworkButton.BackColor = [System.Drawing.Color]::White
-    $NetworkButton.ForeColor = [System.Drawing.Color]::FromArgb(45, 80, 145)
-    $Form.Controls.Add($NetworkButton)
+    $NetworksPage.Controls.Add($NetworksInput)
+    $NetworkButton = & $AddButton $NetworksPage $Messages.AddCurrentNetwork ($PageMargin + $PageWidth - $NetworkButtonWidth) ($Y - 2) $NetworkButtonWidth
     $Y = $NetworksInput.Bottom + 4
-    $Hint = & $AddLabel $Messages.HomeNetworksHint $Margin $Y $InnerWidth -Hint
-    $Y = $Hint.Bottom + 4
-    $AskNetworksInput = New-Object System.Windows.Forms.CheckBox
-    $AskNetworksInput.Location = New-Object System.Drawing.Point($Margin, $Y)
-    $AskNetworksInput.Size = New-Object System.Drawing.Size($InnerWidth, 24)
-    $AskNetworksInput.Text = $Messages.AskForNewNetworks
-    $AskNetworksInput.Checked = [bool]$Settings.AskForNewNetworks
-    $Form.Controls.Add($AskNetworksInput)
-    $Y = $AskNetworksInput.Bottom + 12
+    $Hint = & $AddLabel $NetworksPage $Messages.HomeNetworksHint $PageMargin $Y $PageWidth -Hint
+    $Y = $Hint.Bottom + 8
+    $AskNetworksInput = & $AddCheckBox $NetworksPage $Messages.AskForNewNetworks $Y ([bool]$Settings.AskForNewNetworks)
+    $Y = $AskNetworksInput.Bottom
+    $PageHeights += $Y + 10
 
-    $OtherCallsInput = New-Object System.Windows.Forms.CheckBox
-    $OtherCallsInput.Location = New-Object System.Drawing.Point($Margin, $Y)
-    $OtherCallsInput.Size = New-Object System.Drawing.Size($InnerWidth, 24)
-    $OtherCallsInput.Text = $Messages.DetectOtherCalls
-    $OtherCallsInput.Checked = [bool]$Settings.DetectOtherCalls
-    $Form.Controls.Add($OtherCallsInput)
-    $Y = $OtherCallsInput.Bottom
-    $Hint = & $AddLabel $Messages.DetectOtherCallsHint ($Margin + 18) $Y ($InnerWidth - 18) -Hint
-    $Y = $Hint.Bottom + 12
-
-    $AutostartInput = New-Object System.Windows.Forms.CheckBox
-    $AutostartInput.Location = New-Object System.Drawing.Point($Margin, $Y)
-    $AutostartInput.Size = New-Object System.Drawing.Size($InnerWidth, 24)
-    $AutostartInput.Text = $Messages.Autostart
-    $AutostartInput.Checked = $Autostart
-    $Form.Controls.Add($AutostartInput)
-    $Y = $AutostartInput.Bottom + 2
-
-    $UpdatesInput = New-Object System.Windows.Forms.CheckBox
-    $UpdatesInput.Location = New-Object System.Drawing.Point($Margin, $Y)
-    $UpdatesInput.Size = New-Object System.Drawing.Size($InnerWidth, 24)
-    $UpdatesInput.Text = $Messages.CheckForUpdates
-    $UpdatesInput.Checked = [bool]$Settings.CheckForUpdates
-    $Form.Controls.Add($UpdatesInput)
-    $Y = $UpdatesInput.Bottom + 6
-
-    $HostsInput = $null
-    if ($Install) {
-        $HostsInput = New-Object System.Windows.Forms.CheckBox
-        $HostsInput.Location = New-Object System.Drawing.Point($Margin, $Y)
-        $HostsInput.Size = New-Object System.Drawing.Size($InnerWidth, 24)
-        $HostsInput.Text = $Messages.InstallHosts
-        $Form.Controls.Add($HostsInput)
-        $Y = $HostsInput.Bottom
-        $Hint = & $AddLabel $Messages.InstallHostsHint ($Margin + 18) $Y ($InnerWidth - 18) -Hint
-        $Y = $Hint.Bottom + 6
-    }
-    $Y += 14
-
-    $TestButton = New-Object System.Windows.Forms.Button
-    $TestButton.Location = New-Object System.Drawing.Point($Margin, $Y)
-    $TestButton.Size = New-Object System.Drawing.Size(130, 32)
-    $TestButton.Text = $Messages.Test
-    $TestButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
-    $TestButton.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(205, 213, 224)
-    $TestButton.BackColor = [System.Drawing.Color]::White
-    $TestButton.ForeColor = [System.Drawing.Color]::FromArgb(45, 80, 145)
-    $Form.Controls.Add($TestButton)
-
-    $DiagnosticsButton = $null
-    $ResultWidth = $InnerWidth - 142
-    if ($Diagnostics) {
-        $DiagnosticsButton = New-Object System.Windows.Forms.Button
-        $DiagnosticsButton.Size = New-Object System.Drawing.Size(170, 32)
-        $DiagnosticsButton.Location = New-Object System.Drawing.Point(($Margin + $InnerWidth - 170), $Y)
-        $DiagnosticsButton.Text = $Messages.CopyDiagnostics
-        $DiagnosticsButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
-        $DiagnosticsButton.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(205, 213, 224)
-        $DiagnosticsButton.BackColor = [System.Drawing.Color]::White
-        $DiagnosticsButton.ForeColor = [System.Drawing.Color]::FromArgb(45, 80, 145)
-        $Form.Controls.Add($DiagnosticsButton)
-        $ResultWidth -= 180
-    }
-
-    $TestResult = New-Object System.Windows.Forms.Label
-    $TestResult.Location = New-Object System.Drawing.Point(($Margin + 142), ($Y + 2))
-    $TestResult.Size = New-Object System.Drawing.Size($ResultWidth, 30)
-    $TestResult.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
-    $TestResult.AutoEllipsis = $true
-    $Form.Controls.Add($TestResult)
-    $Y = $TestButton.Bottom + 24
+    # As high as the tallest page
+    $Tabs.Height = ($PageHeights | Measure-Object -Maximum).Maximum + $Tabs.ItemSize.Height + 12
+    $Y = $Tabs.Bottom + 20
 
     $OkButton = New-Object System.Windows.Forms.Button
     $OkButton.Size = New-Object System.Drawing.Size(124, 36)
@@ -1168,12 +1188,12 @@ function Show-TeamsSettingsDialog {
         $DiagnosticsButton.Add_Click({
             try {
                 [System.Windows.Forms.Clipboard]::SetText((& $Diagnostics))
-                $TestResult.ForeColor = [System.Drawing.Color]::FromArgb(30, 120, 60)
-                $TestResult.Text = $Messages.DiagnosticsCopied
+                $DiagnosticsResult.ForeColor = [System.Drawing.Color]::FromArgb(30, 120, 60)
+                $DiagnosticsResult.Text = $Messages.DiagnosticsCopied
             }
             catch {
-                $TestResult.ForeColor = [System.Drawing.Color]::FromArgb(170, 40, 40)
-                $TestResult.Text = $_.Exception.Message
+                $DiagnosticsResult.ForeColor = [System.Drawing.Color]::FromArgb(170, 40, 40)
+                $DiagnosticsResult.Text = $_.Exception.Message
             }
         })
     }
@@ -1184,12 +1204,14 @@ function Show-TeamsSettingsDialog {
         while ($Form.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
             $Url = $WebhookInput.Text.Trim()
             if (-not (Test-WebhookUrl $Url)) {
+                $Tabs.SelectedTab = $GeneralPage
                 & $ShowInvalidWebhook
                 continue
             }
             $Networks = $NetworksInput.Text.Trim()
             $InvalidNetwork = Find-TeamsInvalidNetwork $Networks
             if ($InvalidNetwork) {
+                $Tabs.SelectedTab = $NetworksPage
                 [void][System.Windows.Forms.MessageBox]::Show(
                     $Form,
                     ($Messages.InvalidNetwork -f $InvalidNetwork),
