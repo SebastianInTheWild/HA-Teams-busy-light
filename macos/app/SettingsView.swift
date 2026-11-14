@@ -14,6 +14,7 @@ final class SettingsModel: ObservableObject {
     @Published var askForNewNetworks: Bool
     @Published var detectOtherCalls: Bool
     @Published var diagnosticsCopied = false
+    @Published var tab = SettingsTab.general
     let ignoredNetworks: String
     @Published var testing = false
     @Published var testResult: (text: String, ok: Bool)?
@@ -32,6 +33,10 @@ final class SettingsModel: ObservableObject {
         detectOtherCalls = settings.detectOtherCalls
         ignoredNetworks = settings.ignoredNetworks
     }
+}
+
+enum SettingsTab: Hashable {
+    case general, detection, networks
 }
 
 /// Settings window: webhook URL with test, intervals, start at login and
@@ -53,91 +58,101 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Form {
-                Section {
-                    LabeledContent(L.logAccess) {
-                        switch model.logAccess {
-                        case true?:
-                            Label(L.logAccessOk, systemImage: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                        case false?:
-                            HStack {
-                                Label(L.logAccessMissing, systemImage: "exclamationmark.circle.fill")
-                                    .foregroundStyle(.orange)
-                                Button(L.grantAccess, action: onGrantAccess)
+            TabView(selection: $model.tab) {
+                page {
+                    Section {
+                        LabeledContent(L.logAccess) {
+                            switch model.logAccess {
+                            case true?:
+                                Label(L.logAccessOk, systemImage: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                            case false?:
+                                HStack {
+                                    Label(L.logAccessMissing, systemImage: "exclamationmark.circle.fill")
+                                        .foregroundStyle(.orange)
+                                    Button(L.grantAccess, action: onGrantAccess)
+                                }
+                            case nil:
+                                Text(L.logAccessUnknown).foregroundStyle(.secondary)
                             }
-                        case nil:
-                            Text(L.logAccessUnknown).foregroundStyle(.secondary)
                         }
                     }
-                }
 
-                Section {
-                    TextField(L.webhook, text: $model.webhookURL, prompt: Text("https://…/api/webhook/…"))
-                        .onChange(of: model.webhookURL) { _ in
-                            model.testResult = nil
-                            model.error = nil
+                    Section {
+                        TextField(L.webhook, text: $model.webhookURL, prompt: Text("https://…/api/webhook/…"))
+                            .onChange(of: model.webhookURL) { _ in
+                                model.testResult = nil
+                                model.error = nil
+                            }
+                        HStack {
+                            Button(L.test, action: test)
+                                .disabled(model.testing || trimmedURL.isEmpty)
+                            if model.testing {
+                                ProgressView().controlSize(.small)
+                            }
+                            if let testResult = model.testResult {
+                                Text(testResult.text)
+                                    .foregroundStyle(testResult.ok ? Color.secondary : Color.red)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
-                    HStack {
-                        Button(L.test, action: test)
-                            .disabled(model.testing || trimmedURL.isEmpty)
-                        if model.testing {
-                            ProgressView().controlSize(.small)
-                        }
-                        if let testResult = model.testResult {
-                            Text(testResult.text)
-                                .foregroundStyle(testResult.ok ? Color.secondary : Color.red)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
+                    } footer: {
+                        hint(L.webhookHint)
                     }
-                } footer: {
-                    hint(L.webhookHint)
-                }
 
-                Section {
-                    Stepper(L.heartbeat(model.heartbeatSeconds), value: $model.heartbeatSeconds, in: 10...3600, step: 10)
-                    Stepper(L.poll(model.pollSeconds), value: $model.pollSeconds, in: 1...60)
-                } footer: {
-                    hint(L.heartbeatHint)
-                }
-
-                Section {
-                    TextField(L.homeNetworks, text: $model.homeNetworks, prompt: Text("192.168.1.0/24"))
-                        .onChange(of: model.homeNetworks) { _ in model.error = nil }
-                    HStack {
-                        Spacer()
-                        Button(L.addCurrentNetwork, action: addCurrentNetwork)
+                    Section {
+                        Toggle(L.autostart, isOn: $model.autostart)
+                        Toggle(L.checkForUpdates, isOn: $model.checkForUpdates)
                     }
-                    Toggle(L.askForNewNetworks, isOn: $model.askForNewNetworks)
-                } footer: {
-                    hint(L.homeNetworksHint)
                 }
+                .tabItem { Text(L.tabGeneral) }
+                .tag(SettingsTab.general)
 
-                Section {
-                    Toggle(L.detectOtherCalls, isOn: $model.detectOtherCalls)
-                } footer: {
-                    hint(L.detectOtherCallsHint)
-                }
+                page {
+                    Section {
+                        Toggle(L.detectOtherCalls, isOn: $model.detectOtherCalls)
+                    } footer: {
+                        hint(L.detectOtherCallsHint)
+                    }
 
-                Section {
-                    Toggle(L.autostart, isOn: $model.autostart)
-                    Toggle(L.checkForUpdates, isOn: $model.checkForUpdates)
-                }
+                    Section {
+                        Stepper(L.heartbeat(model.heartbeatSeconds), value: $model.heartbeatSeconds, in: 10...3600, step: 10)
+                        Stepper(L.poll(model.pollSeconds), value: $model.pollSeconds, in: 1...60)
+                    } footer: {
+                        hint(L.heartbeatHint)
+                    }
 
-                Section {
-                    HStack {
-                        Button(L.copyDiagnostics, action: copyDiagnostics)
-                        if model.diagnosticsCopied {
-                            Text(L.diagnosticsCopied).foregroundStyle(.secondary)
+                    Section {
+                        HStack {
+                            Button(L.copyDiagnostics, action: copyDiagnostics)
+                            if model.diagnosticsCopied {
+                                Text(L.diagnosticsCopied).foregroundStyle(.secondary)
+                            }
                         }
+                    } footer: {
+                        hint(L.diagnosticsHint)
                     }
-                } footer: {
-                    hint(L.diagnosticsHint)
                 }
+                .tabItem { Text(L.tabDetection) }
+                .tag(SettingsTab.detection)
+
+                page {
+                    Section {
+                        TextField(L.homeNetworks, text: $model.homeNetworks, prompt: Text("192.168.1.0/24"))
+                            .onChange(of: model.homeNetworks) { _ in model.error = nil }
+                        HStack {
+                            Spacer()
+                            Button(L.addCurrentNetwork, action: addCurrentNetwork)
+                        }
+                        Toggle(L.askForNewNetworks, isOn: $model.askForNewNetworks)
+                    } footer: {
+                        hint(L.homeNetworksHint)
+                    }
+                }
+                .tabItem { Text(L.tabNetworks) }
+                .tag(SettingsTab.networks)
             }
-            .formStyle(.grouped)
-            .scrollDisabled(true)
-            .fixedSize(horizontal: false, vertical: true)
+            .padding([.horizontal, .top], 12)
 
             HStack {
                 if let error = model.error {
@@ -153,9 +168,17 @@ struct SettingsView: View {
                 Button(L.save, action: save)
                     .keyboardShortcut(.defaultAction)
             }
-            .padding([.horizontal, .bottom], 20)
+            .padding(20)
         }
         .frame(width: 520)
+    }
+
+    /// One tab: a grouped form as high as its content
+    private func page<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        Form { content() }
+            .formStyle(.grouped)
+            .scrollDisabled(true)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func hint(_ text: String) -> some View {
@@ -208,11 +231,13 @@ struct SettingsView: View {
         let url = trimmedURL
         guard AppSettings.isValidWebhook(url) else {
             model.error = L.invalidWebhook
+            model.tab = .general
             return
         }
         let networks = model.homeNetworks.trimmingCharacters(in: .whitespacesAndNewlines)
         if let invalid = HomeNetwork.parse(networks).invalid {
             model.error = L.invalidNetwork(invalid)
+            model.tab = .networks
             return
         }
         var settings = AppSettings()

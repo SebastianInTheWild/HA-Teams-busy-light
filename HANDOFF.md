@@ -95,7 +95,10 @@ Ergebnisse 14.11.2026:
   korrekt, Photo Booth nutzt es erst bei Videoaufnahme. Mikrofon ✅: „Sprachmemos“ und
   „Microsoft Teams ModuleHost“ (Teams-Vorschau/Gerätetest, kein Teams-Anruf) erkannt,
   `activity: in_call`, danach wieder aus; Kamera auch nach dem Ruhezustand ✅.
-  Nicht geprüft: „Hey Siri“ (2–4), Teams-Anruf (2), Schalter aus (3), Layout (7).
+  Nicht geprüft: „Hey Siri“ (2–4), Teams-Anruf (2), Schalter aus (3).
+- 7 Einstellungsfenster war zu hoch (User) → Tabs „Allgemein“ (Zugriff, Webhook, Autostart,
+  Updates), „Erkennung“ (andere Anrufe, Intervalle, Diagnose), „Netze“; Fenster 520 × 449 pt.
+  Fehler beim Sichern springen auf den passenden Tab. Vom User noch anzusehen.
 - 5 eigener Status 30 Min ✅ (`source: manual`), „Wieder Teams-Status verwenden“ ✅.
 - 6 Diagnose ✅ (Webhook-ID entfernt, Werte plausibel).
 - Behoben: Bei Kamera-/Mikrofonwechsel stand zusätzlich eine unveränderte „Status: …“-Zeile

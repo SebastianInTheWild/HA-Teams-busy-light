@@ -103,6 +103,9 @@ enum L {
 
     // Settings
     static func version(_ version: String) -> String { "Version \(version)" }
+    static let tabGeneral = t("General", "Allgemein")
+    static let tabDetection = t("Detection", "Erkennung")
+    static let tabNetworks = t("Networks", "Netze")
     static let settingsTitle = t("Teams Busy Light Settings", "Teams Busy Light – Einstellungen")
     static let webhook = t("Webhook URL", "Webhook-URL")
     static let webhookHint = t(
