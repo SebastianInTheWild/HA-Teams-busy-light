@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.5.1
 
 * macOS and Windows: "Check for updates" in the menu and in the settings (General): asks right away, also when the daily check is off, and says whether a newer version is available; from the menu it offers to install it
 
