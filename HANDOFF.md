@@ -4,6 +4,22 @@ Arbeitsnotiz für den Branch `call-detection` (ab `main` = 1.4.0, begonnen 13./1
 **Vor dem Merge nach `main` löschen.** Version (`manifest.json`) und Release erst auf
 Anweisung des Users; CHANGELOG unter „Unreleased“ ist gepflegt. Geplant: 1.5.0.
 
+## Stand 16.11.2026 (Vormittag)
+
+Erledigt heute: Windows-Mikrofon über WASAPI (`287f389`), Windows-Kamera über
+Kameradienst-Ereignisse, experimentell (`0ebf86f`), HA-Test ✅ (siehe „Testplan Home
+Assistant“), Windows 6 (eigener Status wird gesendet, `source: manual`) ✅.
+
+**HA läuft gerade mit der Integration aus dem Branch** (manuell kopiert per SSH
+`hassio@192.168.11.252`, Schlüssel `~/.ssh/claude_ha`, `sudo` nötig; `manifest.json` dort auf
+1.5.0 gesetzt, im Repo nicht). Sicherung der alten: `/config/teams_status.bak-1.4.0` →
+nach dem Release über HACS auf 1.5.0 und die Sicherung löschen.
+
+Noch offen vor Release: Windows 8 (Beenden → `offline`), 9 (CPU), Store-App/mehrere Apps
+gleichzeitig nur vor Ort; Mac: Tabs ansehen, Teams-Anruf, Schalter aus, „Hey Siri“.
+Frage an User offen: neue Windows-Binärsensoren haben Bereichs-Präfix (`buro_…`) –
+umbenennen?
+
 ## Stand 14.11.2026 – weiter am Montag, 16.11.2026
 
 Letzter Commit: `86a47b3` (gepusht). User will 1.5.0 releasen, sobald die Tests durch sind.
@@ -228,6 +244,19 @@ zurück.
 3. Reparatur: alte App (1.4.0) meldet sich → Hinweis unter Einstellungen → Reparaturen,
    sobald die Integration eine höhere Version hat (erst mit der 1.5.0-Versionsnummer
    sichtbar; zum Testen vorher `manifest.json` lokal auf 1.5.0 setzen).
+
+Ergebnisse 16.11.2026 (HA 2026.10.x, Integration aus `0ebf86f` mit Version 1.5.0):
+- Lädt ohne Fehler; Neustart ~25 s.
+- 1 Neue Entities ✅: Windows `binary_sensor.buro_teams_sebastian_windows_{camera,microphone}`
+  (HA setzt bei neuen Entities den Bereich „Büro“ davor; ältere Sensoren ohne), Mac
+  `binary_sensor.teams_mac_{camera,microphone}`; vor der ersten Nachricht `unknown`, danach
+  `off`.
+- 2 Attribute ✅ `source: manual`, `app_version: 1.4.0`, `platform: windows`; Gerät zeigt
+  `sw_version` 1.4.0.
+- 3 Reparatur ✅ `outdated_app_<entry>` für DESKTOP-HB92PQU und FWYL2G2GKF (Mac),
+  „1.4.0 < 1.5.0“, Link aufs Release.
+- Nebenbei (nicht unsere): Spook meldet seit dem Neustart unbekannte `sensor.agent_*` im
+  Dashboard „Agenten“.
 
 ## Offen / später
 
