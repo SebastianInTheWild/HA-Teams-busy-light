@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.5.0
 
 * macOS and Windows: camera and microphone in use by any app are sent to Home Assistant (new `binary_sensor.…_camera` and `binary_sensor.…_microphone`); optional "Also detect calls in other apps" (on by default) reports a call while any app uses the microphone (Zoom, Webex, FaceTime, browser …). Windows: the microphone comes from the audio system and works on all versions; on newer Windows 11 versions, which no longer report the camera in the registry, it comes from the events of the camera service (experimental)
 * macOS and Windows: settings window in tabs (General, Detection, Networks)
