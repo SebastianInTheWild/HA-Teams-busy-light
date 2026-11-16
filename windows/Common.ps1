@@ -360,62 +360,216 @@ function Set-TeamsManualStatus {
 # Statuses offered under "Set status" in the tray menu
 $ManualStatuses = @('available', 'busy', 'do_not_disturb', 'be_right_back', 'away')
 
-# Camera and microphone in use by any app. Windows records the use per app
-# for the privacy settings ("recently used"): an app uses the device while
-# LastUsedTimeStop is 0. Reads only the registry, no permission needed.
+# Camera and microphone in use by any app. No permission needed.
+# - Microphone: the active recording sessions of the Windows audio system
+#   (WASAPI), with the process of each session. Works on all Windows versions.
+# - Camera: Windows has no such interface. Older Windows versions record the
+#   use per app in the registry for the privacy settings ("recently used"):
+#   an app uses the device while LastUsedTimeStop is 0. Newer Windows 11
+#   versions keep this in a database only the system can read; the camera is
+#   then unknown ($null) and not sent.
+#   The registry is also the fallback for the microphone.
 function Get-TeamsDeviceUsage {
-    $Result = @{ Camera = $false; Microphone = $false; CameraApps = @(); MicrophoneApps = @() }
-    foreach ($Device in @(@('webcam', 'Camera'), @('microphone', 'Microphone'))) {
-        $Apps = @(Get-TeamsDeviceUsers $Device[0])
-        $Result[$Device[1]] = $Apps.Count -gt 0
-        $Result["$($Device[1])Apps"] = $Apps
+    $Camera = Get-TeamsDeviceUsers 'webcam'
+    $Result = @{
+        Camera = if ($Camera.Tracked) { $Camera.Apps.Count -gt 0 } else { $null }
+        CameraApps = $Camera.Apps
+        MicrophoneApps = @()
+        MicrophoneSource = 'audio system'
     }
+    $Apps = Get-TeamsMicrophoneUsers
+    if ($null -eq $Apps) {
+        $Microphone = Get-TeamsDeviceUsers 'microphone'
+        $Result.MicrophoneSource = if ($Microphone.Tracked) { 'registry' } else { 'none' }
+        $Apps = if ($Microphone.Tracked) { $Microphone.Apps } else { $null }
+    }
+    $Result.Microphone = if ($null -eq $Apps) { $null } else { @($Apps).Count -gt 0 }
+    if ($Apps) { $Result.MicrophoneApps = @($Apps) }
     return $Result
 }
 
+$TeamsAudioCaptureSource = @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+
+namespace TeamsBusyLight {
+    [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] class MMDeviceEnumerator {}
+
+    [ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMDeviceEnumerator {
+        [PreserveSig] int EnumAudioEndpoints(int dataFlow, int stateMask, out IMMDeviceCollection devices);
+    }
+
+    [ComImport, Guid("0BD7A1BE-7A1A-44DB-8397-CC5392387B5E"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMDeviceCollection {
+        [PreserveSig] int GetCount(out int count);
+        [PreserveSig] int Item(int index, out IMMDevice device);
+    }
+
+    [ComImport, Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMDevice {
+        [PreserveSig] int Activate(ref Guid iid, int clsCtx, IntPtr activationParams, [MarshalAs(UnmanagedType.IUnknown)] out object instance);
+    }
+
+    [ComImport, Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IAudioSessionManager2 {
+        [PreserveSig] int GetAudioSessionControl(IntPtr sessionGuid, int flags, out IntPtr control);
+        [PreserveSig] int GetSimpleAudioVolume(IntPtr sessionGuid, int flags, out IntPtr volume);
+        [PreserveSig] int GetSessionEnumerator(out IAudioSessionEnumerator sessions);
+    }
+
+    [ComImport, Guid("E2F5BB11-0570-40CA-ACDD-3AA01277DEE8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IAudioSessionEnumerator {
+        [PreserveSig] int GetCount(out int count);
+        [PreserveSig] int GetSession(int index, [MarshalAs(UnmanagedType.IUnknown)] out object session);
+    }
+
+    [ComImport, Guid("bfb7ff88-7239-4fc9-8fa2-07c950be9c6d"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IAudioSessionControl2 {
+        [PreserveSig] int GetState(out int state);
+        [PreserveSig] int GetDisplayName(out IntPtr name);
+        [PreserveSig] int SetDisplayName(IntPtr name, IntPtr context);
+        [PreserveSig] int GetIconPath(out IntPtr path);
+        [PreserveSig] int SetIconPath(IntPtr path, IntPtr context);
+        [PreserveSig] int GetGroupingParam(out Guid param);
+        [PreserveSig] int SetGroupingParam(IntPtr param, IntPtr context);
+        [PreserveSig] int RegisterAudioSessionNotification(IntPtr client);
+        [PreserveSig] int UnregisterAudioSessionNotification(IntPtr client);
+        [PreserveSig] int GetSessionIdentifier(out IntPtr id);
+        [PreserveSig] int GetSessionInstanceIdentifier(out IntPtr id);
+        [PreserveSig] int GetProcessId(out int pid);
+        [PreserveSig] int IsSystemSoundsSession();
+    }
+
+    public static class AudioCapture {
+        static void Release(object o) {
+            if (o != null && Marshal.IsComObject(o)) Marshal.ReleaseComObject(o);
+        }
+
+        // Process IDs of all recording sessions that are active right now, on all microphones
+        public static int[] ActiveProcessIds() {
+            var result = new List<int>();
+            object enumerator = new MMDeviceEnumerator();
+            IMMDeviceCollection devices = null;
+            try {
+                Marshal.ThrowExceptionForHR(((IMMDeviceEnumerator)enumerator).EnumAudioEndpoints(1 /* eCapture */, 1 /* DEVICE_STATE_ACTIVE */, out devices));
+                int count;
+                devices.GetCount(out count);
+                for (int i = 0; i < count; i++) {
+                    IMMDevice device = null;
+                    object manager = null;
+                    IAudioSessionEnumerator sessions = null;
+                    try {
+                        if (devices.Item(i, out device) != 0) continue;
+                        Guid iid = typeof(IAudioSessionManager2).GUID;
+                        if (device.Activate(ref iid, 23 /* CLSCTX_ALL */, IntPtr.Zero, out manager) != 0) continue;
+                        if (((IAudioSessionManager2)manager).GetSessionEnumerator(out sessions) != 0) continue;
+                        int n;
+                        sessions.GetCount(out n);
+                        for (int j = 0; j < n; j++) {
+                            object session = null;
+                            try {
+                                if (sessions.GetSession(j, out session) != 0) continue;
+                                var control = (IAudioSessionControl2)session;
+                                int state, pid;
+                                // State 1 = active; IsSystemSoundsSession returns 0 for system sounds
+                                if (control.GetState(out state) == 0 && state == 1 &&
+                                    control.IsSystemSoundsSession() != 0 &&
+                                    control.GetProcessId(out pid) == 0 && pid != 0 && !result.Contains(pid)) {
+                                    result.Add(pid);
+                                }
+                            }
+                            finally { Release(session); }
+                        }
+                    }
+                    finally { Release(sessions); Release(manager); Release(device); }
+                }
+            }
+            finally { Release(devices); Release(enumerator); }
+            return result.ToArray();
+        }
+    }
+}
+'@
+
+# Names of the processes recording from a microphone right now (e.g. "Zoom",
+# "msedge"): an empty list when none, $null when the audio system cannot be asked
+function Get-TeamsMicrophoneUsers {
+    if ($null -eq $script:TeamsAudioCaptureReady) {
+        try {
+            Add-Type -TypeDefinition $TeamsAudioCaptureSource -ErrorAction Stop
+            $script:TeamsAudioCaptureReady = $true
+        }
+        catch {
+            $script:TeamsAudioCaptureReady = $false
+        }
+    }
+    if (-not $script:TeamsAudioCaptureReady) {
+        return $null
+    }
+    try {
+        $Ids = [TeamsBusyLight.AudioCapture]::ActiveProcessIds()
+    }
+    catch {
+        return $null
+    }
+    $Names = @(foreach ($Id in $Ids) {
+        $Process = Get-Process -Id $Id -ErrorAction SilentlyContinue
+        if ($Process) { $Process.ProcessName }
+    })
+    # The comma keeps an empty list from turning into $null
+    return , @($Names | Sort-Object -Unique)
+}
+
+# Apps using a device according to the registry. Tracked is false when this
+# Windows version does not record the use there (no LastUsedTimeStart at all).
 function Get-TeamsDeviceUsers {
     param([string]$Capability)
 
     $Users = New-Object System.Collections.Generic.List[string]
+    $Seen = @{ Tracked = $false }
     $Root = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\$Capability")
-    if (-not $Root) {
-        return $Users
-    }
-    try {
-        $Check = {
-            param($Key, [string]$Name)
-            $Start = $Key.GetValue('LastUsedTimeStart')
-            $Stop = $Key.GetValue('LastUsedTimeStop')
-            if ($null -ne $Start -and [long]$Start -ne 0 -and $null -ne $Stop -and [long]$Stop -eq 0) {
-                $Users.Add($Name)
+    if ($Root) {
+        try {
+            $Check = {
+                param($Key, [string]$Name)
+                $Start = $Key.GetValue('LastUsedTimeStart')
+                $Stop = $Key.GetValue('LastUsedTimeStop')
+                if ($null -ne $Start) {
+                    $Seen.Tracked = $true
+                }
+                if ($null -ne $Start -and [long]$Start -ne 0 -and $null -ne $Stop -and [long]$Stop -eq 0) {
+                    $Users.Add($Name)
+                }
             }
-        }
-        foreach ($Name in $Root.GetSubKeyNames()) {
-            $Key = $Root.OpenSubKey($Name)
-            if (-not $Key) { continue }
-            try {
-                if ($Name -eq 'NonPackaged') {
-                    # Desktop apps: the path with # instead of \, e.g. C:#Program Files#Zoom#bin#Zoom.exe -> Zoom
-                    foreach ($AppName in $Key.GetSubKeyNames()) {
-                        $AppKey = $Key.OpenSubKey($AppName)
-                        if (-not $AppKey) { continue }
-                        try { & $Check $AppKey (($AppName -split '#')[-1] -replace '\.exe$', '') } finally { $AppKey.Close() }
+            foreach ($Name in $Root.GetSubKeyNames()) {
+                $Key = $Root.OpenSubKey($Name)
+                if (-not $Key) { continue }
+                try {
+                    if ($Name -eq 'NonPackaged') {
+                        # Desktop apps: the path with # instead of \, e.g. C:#Program Files#Zoom#bin#Zoom.exe -> Zoom
+                        foreach ($AppName in $Key.GetSubKeyNames()) {
+                            $AppKey = $Key.OpenSubKey($AppName)
+                            if (-not $AppKey) { continue }
+                            try { & $Check $AppKey (($AppName -split '#')[-1] -replace '\.exe$', '') } finally { $AppKey.Close() }
+                        }
+                    }
+                    else {
+                        # Store apps, e.g. MSTeams_8wekyb3d8bbwe
+                        & $Check $Key ($Name -split '_')[0]
                     }
                 }
-                else {
-                    # Store apps, e.g. MSTeams_8wekyb3d8bbwe
-                    & $Check $Key ($Name -split '_')[0]
+                finally {
+                    $Key.Close()
                 }
             }
-            finally {
-                $Key.Close()
-            }
+        }
+        finally {
+            $Root.Close()
         }
     }
-    finally {
-        $Root.Close()
-    }
-    return $Users
+    return @{ Tracked = $Seen.Tracked; Apps = @($Users) }
 }
 
 # Installed version (version.txt, written by the installer), "0.0.0" if unknown
@@ -433,8 +587,15 @@ function Get-TeamsVersion {
 $script:TeamsAppVersion = Get-TeamsVersion
 
 # Camera and microphone are reported off together with offline (the app
-# stops watching them)
-$OfflineExtra = @{ camera = $false; microphone = $false; source = 'teams' }
+# stops watching them). A camera this Windows version does not report
+# ($State.Camera is $null) is left out, so it stays unknown in Home Assistant.
+function Get-TeamsOfflineExtra {
+    $Extra = @{ microphone = $false; source = 'teams' }
+    if ($null -ne $State.Camera) {
+        $Extra.camera = $false
+    }
+    return $Extra
+}
 
 # True if version a is newer than version b (e.g. "1.10.0" > "1.9.2")
 function Test-TeamsNewerVersion {

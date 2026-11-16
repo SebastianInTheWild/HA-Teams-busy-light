@@ -76,9 +76,11 @@ $State = @{
     # any app uses the microphone
     Activity = 'not_in_call'
     TeamsActivity = 'not_in_call'
-    Camera = $false
+    # $null = unknown (this Windows version does not report it)
+    Camera = $null
     Microphone = $false
     MicrophoneApps = @()
+    MicrophoneSource = $null
     Manual = Get-TeamsManualStatus
     Language = $null
     # What was sent last (status, activity, camera, microphone, source)
@@ -549,15 +551,21 @@ function Update-TeamsState {
     }
 
     $Devices = Get-TeamsDeviceUsage
+    $State.MicrophoneSource = $Devices.MicrophoneSource
     if ($Devices.Camera -ne $State.Camera) {
         $State.Camera = $Devices.Camera
-        Write-TeamsLog $(if ($Devices.Camera) { $Messages.LogCameraOn -f ($Devices.CameraApps -join ', ') } else { $Messages.LogCameraOff })
+        if ($null -ne $Devices.Camera) {
+            Write-TeamsLog $(if ($Devices.Camera) { $Messages.LogCameraOn -f ($Devices.CameraApps -join ', ') } else { $Messages.LogCameraOff })
+        }
         $Changed = $true
     }
-    if ($Devices.Microphone -ne $State.Microphone) {
+    $MicrophoneApps = ($Devices.MicrophoneApps -join ', ')
+    if ($Devices.Microphone -ne $State.Microphone -or ($Devices.Microphone -and $MicrophoneApps -ne ($State.MicrophoneApps -join ', '))) {
         $State.Microphone = $Devices.Microphone
         $State.MicrophoneApps = $Devices.MicrophoneApps
-        Write-TeamsLog $(if ($Devices.Microphone) { $Messages.LogMicrophoneOn -f ($Devices.MicrophoneApps -join ', ') } else { $Messages.LogMicrophoneOff })
+        if ($null -ne $Devices.Microphone) {
+            Write-TeamsLog $(if ($Devices.Microphone) { $Messages.LogMicrophoneOn -f $MicrophoneApps } else { $Messages.LogMicrophoneOff })
+        }
         $Changed = $true
     }
 
@@ -655,8 +663,8 @@ function Get-TeamsDiagnostics {
         "Teams status:     $(if ($State.Status) { $State.Status } else { '-' })"
         "Teams activity:   $($State.TeamsActivity)"
         "Manual status:    $Manual"
-        "Camera in use:    $(if ($State.Camera) { 'yes' } else { 'no' })"
-        "Microphone:       $(if ($State.Microphone) { 'in use by ' + ($State.MicrophoneApps -join ', ') } else { 'not in use' })"
+        "Camera in use:    $(if ($null -eq $State.Camera) { 'unknown (not reported by this Windows version)' } elseif ($State.Camera) { 'yes' } else { 'no' })"
+        "Microphone:       $(if ($null -eq $State.Microphone) { 'unknown' } elseif ($State.Microphone) { 'in use by ' + ($State.MicrophoneApps -join ', ') } else { 'not in use' }) (from $($State.MicrophoneSource))"
         "Other calls:      $(if ($Config.DetectOtherCalls) { 'on' } else { 'off' })"
         "Effective:        status $(Get-TeamsEffectiveStatus), activity $($State.Activity)"
         ''
@@ -693,7 +701,7 @@ function Suspend-TeamsSending {
     }
     if ($TellHomeAssistant) {
         # Not awaited; the result is not needed
-        [void](Start-TeamsStatusSend -Client $Http -WebhookUrl $Config.WebhookUrl -Status 'offline' -Activity 'not_in_call' -Extra $OfflineExtra)
+        [void](Start-TeamsStatusSend -Client $Http -WebhookUrl $Config.WebhookUrl -Status 'offline' -Activity 'not_in_call' -Extra (Get-TeamsOfflineExtra))
     }
     $State.SendError = $null
     Update-TrayDisplay
@@ -780,7 +788,10 @@ function Invoke-TeamsSend {
     $Due = ($Now - $State.LastSent).TotalSeconds -ge $Config.HeartbeatSeconds
     if (($Changed -or $Due) -and $Now -ge $State.RetryAfter) {
         $State.SendKey = $Key
-        $Extra = @{ camera = $State.Camera; microphone = $State.Microphone; source = $Source }
+        $Extra = @{ source = $Source }
+        # Unknown values are left out, Home Assistant then keeps the sensor unknown
+        if ($null -ne $State.Camera) { $Extra.camera = $State.Camera }
+        if ($null -ne $State.Microphone) { $Extra.microphone = $State.Microphone }
         $State.SendTask = Start-TeamsStatusSend -Client $Http -WebhookUrl $Config.WebhookUrl -Status $Status -Activity $State.Activity -Language $State.Language -Extra $Extra
     }
 }
@@ -790,7 +801,7 @@ function Exit-TeamsBusyLight {
     # Tell Home Assistant right away instead of waiting for the timeout; not
     # when stopped for an update, the new version sends right after starting
     if ($Config.WebhookUrl -and -not $State.PausedUntil -and -not $State.Updating -and (Test-TeamsHomeNetwork $Config.HomeNetworks)) {
-        [void](Send-TeamsStatus -WebhookUrl $Config.WebhookUrl -Status 'offline' -Activity 'not_in_call' -Extra $OfflineExtra -TimeoutSeconds 3)
+        [void](Send-TeamsStatus -WebhookUrl $Config.WebhookUrl -Status 'offline' -Activity 'not_in_call' -Extra (Get-TeamsOfflineExtra) -TimeoutSeconds 3)
     }
     $Tray.Visible = $false
     $Tray.Dispose()

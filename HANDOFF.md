@@ -36,6 +36,25 @@ Diagnose-Beschriftungen, Einstellungen in Tabs), diese Datei löschen, nach `mai
 Release wie bei 1.4.0 (Windows-Download per bash hochladen, signiert). Danach auf dem HA
 über HACS auf das Release 1.5.0 zurück und den Reparatur-Hinweis mit einer alten App prüfen.
 
+## Befund 16.11.2026: Registry-Erkennung unter Windows 11 26H2 wirkungslos
+
+Echter Test per RDP (Kamera und Mikrofon umgeleitet): Kamera-App, Sprachrekorder und Edge →
+nichts erkannt. `ConsentStore\{webcam,microphone}` enthält nur noch `Value`/`LastSetTime`,
+**kein** `LastUsedTimeStart/Stop` (auch keine alten Einträge, `NonPackaged` ohne
+Unterschlüssel). Nutzung steht jetzt in
+`C:\ProgramData\Microsoft\Windows\CapabilityAccessManager\CapabilityAccessManager.db` –
+nur für SYSTEM lesbar. Der Test vom 14.11. lief nur, weil die Einträge künstlich angelegt
+waren. Vorschlag an den User: Mikrofon über WASAPI (`IAudioSessionManager2`, aktive
+Aufnahme-Sitzungen mit Prozess-ID, ohne Admin), Kamera: Registry nur als Rückfall für ältere
+Windows-Versionen, sonst nicht verfügbar (README). Erst Prototyp auf dem Rechner, dann Einbau.
+
+**Umgesetzt (16.11.):** Mikrofon über WASAPI (`Get-TeamsMicrophoneUsers`, C# per `Add-Type`,
+einmal ~200 ms, danach ~3 ms je Prüfung), Registry nur noch Rückfall. Kamera: unbekannt
+(`$null`), wenn Windows keine `LastUsedTimeStart` mehr schreibt → wird nicht gesendet, HA
+bleibt „unbekannt“, auch bei `offline` (`Get-TeamsOfflineExtra`). Diagnose zeigt die Quelle.
+Echter Test per RDP ✅: Sprachrekorder („VoiceRecorder“) und Edge („msedge“) an/aus, HA
+`in_call`/`not_in_call` passend. Nächster Schritt: Kamera-Erkennung für neue Windows prüfen.
+
 ## Entscheidungen (mit dem User, 13.11.2026)
 
 - Gewünscht: (1) Teams-Mikro/Kamera, (2) Anrufe anderer Apps, (3) eigenen Status im Menü
