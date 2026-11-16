@@ -34,14 +34,30 @@ final class UpdateChecker {
         check()
     }
 
-    func check() {
+    /// Answer to "Check for Updates" in the menu and the settings
+    enum CheckResult {
+        case upToDate(String)
+        case available(String)
+        case failed(String)
+    }
+
+    /// Asks GitHub for the latest release. The daily check passes no
+    /// completion; "Check for Updates" gets the answer on the main thread.
+    func check(completion: ((CheckResult) -> Void)? = nil) {
         var request = URLRequest(url: Self.api, timeoutInterval: 20)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
-            guard let self, let data,
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self else { return }
+            guard let data,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let tag = json["tag_name"] as? String
-            else { return }
+            else {
+                let status = (response as? HTTPURLResponse)?.statusCode
+                let reason = error?.localizedDescription ?? status.map { "HTTP \($0)" } ?? "no answer"
+                Log.write("Update check failed: \(reason)")
+                DispatchQueue.main.async { completion?(.failed(reason)) }
+                return
+            }
             let latest = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
             let assets = json["assets"] as? [[String: Any]] ?? []
             let download = assets.first { $0["name"] as? String == Updater.assetName }?["browser_download_url"] as? String
@@ -60,6 +76,7 @@ final class UpdateChecker {
                     self.downloadURL = url
                     self.onChange?()
                 }
+                completion?(newer.map(CheckResult.available) ?? .upToDate(self.currentVersion))
             }
         }.resume()
     }

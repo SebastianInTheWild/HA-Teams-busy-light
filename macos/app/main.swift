@@ -26,6 +26,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var installingVersion: String?
     /// Quitting for an update: the new version sends the status right away
     private var quittingForUpdate = false
+    /// "Check for Updates" is running: it answers itself, no notification
+    private var checkingManually = false
 
     private let statusLine = NSMenuItem()
     private let activityLine = NSMenuItem()
@@ -177,6 +179,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         menu.addItem(.separator())
         updateItem.target = self
         menu.addItem(updateItem)
+        menu.addItem(withTitle: L.menuCheckForUpdates, action: #selector(checkForUpdatesClicked), keyEquivalent: "").target = self
         menu.addItem(withTitle: L.menuSettings, action: #selector(showSettings), keyEquivalent: ",").target = self
         menu.addItem(withTitle: L.menuShowLog, action: #selector(showLog), keyEquivalent: "").target = self
         menu.addItem(.separator())
@@ -300,6 +303,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 model: model,
                 currentStatus: { [weak self] in (self?.monitor.effectiveStatus, self?.monitor.inCall ?? false) },
                 diagnostics: { [weak self] in self.map { Diagnostics.text(monitor: $0.monitor, settings: $0.settings, updateChecker: $0.updateChecker) } ?? "" },
+                checkForUpdates: { [weak self] completion in self?.checkForUpdates(completion: completion) },
                 onSave: { [weak self] settings, autostart in self?.apply(settings, autostart: autostart) },
                 onClose: { [weak self] in self?.settingsWindow?.close() },
                 onGrantAccess: { [weak self] in self?.openAccessSettings() },
@@ -487,13 +491,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
     }
 
+    /// "Check for Updates" (menu and settings): asks GitHub right away, also
+    /// when the daily check is off
+    private func checkForUpdates(completion: @escaping (UpdateChecker.CheckResult) -> Void) {
+        checkingManually = true
+        updateChecker.check { [weak self] result in
+            self?.checkingManually = false
+            completion(result)
+        }
+    }
+
+    /// Menu item: offers to install a newer version, otherwise says so
+    @objc private func checkForUpdatesClicked() {
+        checkForUpdates { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .available:
+                // Asks whether to install it, or opens the release page
+                self.updateClicked()
+            case .upToDate(let version):
+                NSApp.activate(ignoringOtherApps: true)
+                let alert = NSAlert()
+                alert.messageText = L.updateCheckLatest(version)
+                alert.addButton(withTitle: L.ok)
+                alert.runModal()
+            case .failed(let reason):
+                NSApp.activate(ignoringOtherApps: true)
+                let alert = NSAlert()
+                alert.alertStyle = .warning
+                alert.messageText = L.updateCheckFailed(reason)
+                alert.addButton(withTitle: L.ok)
+                alert.runModal()
+            }
+        }
+    }
+
     // MARK: Update hint
 
     /// Shows a notification once per new version
     private func updateChanged() {
         refresh()
         let key = "notifiedVersion"
-        guard let version = updateChecker.availableVersion,
+        guard !checkingManually,
+              let version = updateChecker.availableVersion,
               UserDefaults.standard.string(forKey: key) != version
         else { return }
         UserDefaults.standard.set(version, forKey: key)

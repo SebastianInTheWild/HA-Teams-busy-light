@@ -59,6 +59,8 @@ The installer copies `Teams Busy Light.app` to `~/Applications` and starts it. T
 The app is signed with the same certificate in every release, so the access is kept
 after updates. To update, choose **Install version …** in the menu when Teams Busy Light
 shows a new release, or run `install.sh` of the new release; the settings are kept either way.
+**Check for Updates…** in the menu (or **Check for Updates** under General in the settings)
+asks right away, also when the daily check is off.
 
 The update function installs a download only if it is signed with the same certificate as
 the installed app (the designated requirement `certificate leaf = H"…"`) and is exactly the

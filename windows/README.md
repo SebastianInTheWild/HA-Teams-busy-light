@@ -66,7 +66,7 @@ then **Install**. It
 Every Windows user installs Teams Busy Light for themselves, with their own integration
 entry and webhook URL.
 
-To update, choose **Install version …** in the menu when Teams Busy Light shows a new release, or run `Install.cmd` of the new release; the settings are kept either way.
+To update, choose **Install version …** in the menu when Teams Busy Light shows a new release, or run `Install.cmd` of the new release; the settings are kept either way. **Check for updates...** in the menu (or **Check for updates** under General in the settings) asks right away, also when the daily check is off.
 
 The update function installs a download only if it is signed with the project's own certificate and none of its files was changed, added or removed (the release contains a signed catalog `TeamsBusyLight.cat` with the hashes of all files). Windows does not need to trust the certificate; the app checks it against the fingerprint it ships with. Nothing is installed without your confirmation, and steps that need administrator rights (hosts file, removing the old service) stay with `Install.cmd`.
 

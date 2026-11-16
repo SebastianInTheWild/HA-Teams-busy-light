@@ -18,6 +18,8 @@ final class SettingsModel: ObservableObject {
     let ignoredNetworks: String
     @Published var testing = false
     @Published var testResult: (text: String, ok: Bool)?
+    @Published var checkingUpdates = false
+    @Published var updateCheckResult: (text: String, ok: Bool)?
     @Published var error: String?
     /// nil while Teams is not running (the access is only checked then)
     @Published var logAccess: Bool?
@@ -47,6 +49,8 @@ struct SettingsView: View {
     let currentStatus: () -> (status: String?, inCall: Bool)
     /// Text for "Copy Diagnostics"
     let diagnostics: () -> String
+    /// "Check for Updates": answers on the main thread
+    let checkForUpdates: (@escaping (UpdateChecker.CheckResult) -> Void) -> Void
     let onSave: (AppSettings, Bool) -> Void
     let onClose: () -> Void
     let onGrantAccess: () -> Void
@@ -103,6 +107,18 @@ struct SettingsView: View {
                     Section {
                         Toggle(L.autostart, isOn: $model.autostart)
                         Toggle(L.checkForUpdates, isOn: $model.checkForUpdates)
+                        HStack {
+                            Button(L.checkForUpdatesNow, action: checkUpdates)
+                                .disabled(model.checkingUpdates)
+                            if model.checkingUpdates {
+                                ProgressView().controlSize(.small)
+                            }
+                            if let result = model.updateCheckResult {
+                                Text(result.text)
+                                    .foregroundStyle(result.ok ? Color.secondary : Color.red)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
                     }
                 }
                 .tabItem { Text(L.tabGeneral) }
@@ -206,6 +222,24 @@ struct SettingsView: View {
                 model.testResult = (L.testFailed(reason), false)
             } else {
                 model.testResult = (L.testOk(L.statusName(status)), true)
+            }
+        }
+    }
+
+    /// A newer version is only shown here and installed from the menu: the
+    /// app restarts for it, and open settings would be lost
+    private func checkUpdates() {
+        model.checkingUpdates = true
+        model.updateCheckResult = nil
+        checkForUpdates { result in
+            model.checkingUpdates = false
+            switch result {
+            case .upToDate(let version):
+                model.updateCheckResult = (L.updateCheckLatest(version), true)
+            case .available(let version):
+                model.updateCheckResult = (L.updateCheckAvailable(version), true)
+            case .failed(let reason):
+                model.updateCheckResult = (L.updateCheckFailed(reason), false)
             }
         }
     }

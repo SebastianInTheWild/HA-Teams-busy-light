@@ -1063,7 +1063,9 @@ function Show-TeamsSettingsDialog {
         [bool]$LegacyFound = $false,
         [string]$Version = (Get-TeamsVersion),
         # Returns the text for "Copy diagnostics" (only in the tray app)
-        [scriptblock]$Diagnostics
+        [scriptblock]$Diagnostics,
+        # "Check for updates" (only in the tray app): returns @{ Latest; Newer; Error }
+        [scriptblock]$CheckUpdates
     )
 
     $Width = 660
@@ -1263,6 +1265,13 @@ function Show-TeamsSettingsDialog {
     $Y = $AutostartInput.Bottom + 2
     $UpdatesInput = & $AddCheckBox $GeneralPage $Messages.CheckForUpdates $Y ([bool]$Settings.CheckForUpdates)
     $Y = $UpdatesInput.Bottom + 6
+    $CheckUpdatesButton = $null
+    $CheckUpdatesResult = $null
+    if ($CheckUpdates) {
+        $CheckUpdatesButton = & $AddButton $GeneralPage $Messages.CheckUpdatesNow $PageMargin $Y 170
+        $CheckUpdatesResult = & $AddResult $GeneralPage ($PageMargin + 182) $Y
+        $Y = $CheckUpdatesButton.Bottom + 6
+    }
 
     $HostsInput = $null
     if ($Install) {
@@ -1421,6 +1430,36 @@ function Show-TeamsSettingsDialog {
             $TestButton.Enabled = $true
         }
     })
+
+    if ($CheckUpdatesButton) {
+        $CheckUpdatesButton.Add_Click({
+            $CheckUpdatesButton.Enabled = $false
+            $CheckUpdatesResult.ForeColor = $HintColor
+            $CheckUpdatesResult.Text = $Messages.UpdateChecking
+            $Form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+            $Form.Refresh()
+            try {
+                $Check = & $CheckUpdates
+                if ($Check.Error) {
+                    $CheckUpdatesResult.ForeColor = [System.Drawing.Color]::FromArgb(170, 40, 40)
+                    $CheckUpdatesResult.Text = $Messages.UpdateCheckFailed -f $Check.Error
+                }
+                elseif ($Check.Newer) {
+                    # Installed from the menu: the app restarts, open settings would be lost
+                    $CheckUpdatesResult.ForeColor = [System.Drawing.Color]::FromArgb(45, 80, 145)
+                    $CheckUpdatesResult.Text = $Messages.UpdateCheckAvailable -f $Check.Latest
+                }
+                else {
+                    $CheckUpdatesResult.ForeColor = [System.Drawing.Color]::FromArgb(30, 120, 60)
+                    $CheckUpdatesResult.Text = $Messages.UpdateCheckLatest -f $Version
+                }
+            }
+            finally {
+                $Form.Cursor = [System.Windows.Forms.Cursors]::Default
+                $CheckUpdatesButton.Enabled = $true
+            }
+        })
+    }
 
     if ($DiagnosticsButton) {
         $DiagnosticsButton.Add_Click({

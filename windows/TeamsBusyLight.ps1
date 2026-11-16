@@ -175,6 +175,7 @@ $ConnectionItem.Enabled = $false
 $SettingsItem = New-Object System.Windows.Forms.ToolStripMenuItem($Messages.MenuSettings)
 $SettingsItem.Font = New-Object System.Drawing.Font($SettingsItem.Font, [System.Drawing.FontStyle]::Bold)
 $LogItem = New-Object System.Windows.Forms.ToolStripMenuItem($Messages.MenuOpenLog)
+$CheckUpdatesItem = New-Object System.Windows.Forms.ToolStripMenuItem($Messages.MenuCheckUpdates)
 $UpdateItem = New-Object System.Windows.Forms.ToolStripMenuItem
 $UpdateItem.Visible = $false
 $PauseItem = New-Object System.Windows.Forms.ToolStripMenuItem($Messages.MenuPause)
@@ -217,6 +218,7 @@ $ExitItem = New-Object System.Windows.Forms.ToolStripMenuItem($Messages.MenuExit
 [void]$Menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
 [void]$Menu.Items.Add($SettingsItem)
 [void]$Menu.Items.Add($LogItem)
+[void]$Menu.Items.Add($CheckUpdatesItem)
 [void]$Menu.Items.Add($UpdateItem)
 [void]$Menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
 [void]$Menu.Items.Add($ExitItem)
@@ -424,6 +426,69 @@ function Clear-TeamsUpdateFolders {
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 }
 
+# Applies the answer of the GitHub API (latest release). Returns the latest
+# version; a newer one is offered in the menu, with a notification unless
+# -Quiet (the user asked and gets an answer anyway).
+function Set-TeamsLatestRelease {
+    param([string]$Json, [switch]$Quiet)
+
+    $Release = $Json | ConvertFrom-Json
+    $Latest = ([string]$Release.tag_name).TrimStart('v')
+    if (-not $Latest) {
+        throw 'no version in the answer of GitHub'
+    }
+    if ((Test-TeamsNewerVersion $Latest $AppVersion) -and $Latest -ne $State.UpdateVersion -and -not $State.Updating) {
+        $State.UpdateVersion = $Latest
+        # Install from the app only if the download can be checked
+        $Asset = @($Release.assets | Where-Object { $_.name -eq $ReleaseAssetName }) | Select-Object -First 1
+        $State.UpdateAssetUrl = if ($SigningCertificateSha256 -and $Asset -and ([string]$Asset.browser_download_url).StartsWith('https://')) {
+            [string]$Asset.browser_download_url
+        }
+        else {
+            $null
+        }
+        Write-TeamsLog "Update available: $Latest$(if ($State.UpdateAssetUrl) { ' (can be installed from the app)' })"
+        Set-TeamsUpdateItem
+        if (-not $Quiet) {
+            $Balloon = if ($State.UpdateAssetUrl) { $Messages.UpdateBalloonInstall } else { $Messages.UpdateBalloon }
+            $Tray.ShowBalloonTip(10000, $Messages.AppName, ($Balloon -f $Latest), [System.Windows.Forms.ToolTipIcon]::Info)
+        }
+    }
+    return $Latest
+}
+
+# "Check for updates" in the menu and the settings: asks GitHub right away
+# (also when the daily check is off) and waits for the answer.
+# Returns @{ Latest; Newer; Error }.
+function Invoke-TeamsUpdateCheckNow {
+    $Result = @{ Latest = $null; Newer = $false; Error = $null }
+    try {
+        $Json = $UpdateHttp.GetStringAsync($ReleasesApi).GetAwaiter().GetResult()
+        $Result.Latest = Set-TeamsLatestRelease $Json -Quiet
+        $Result.Newer = Test-TeamsNewerVersion $Result.Latest $AppVersion
+        $State.LastUpdateCheck = Get-Date
+    }
+    catch {
+        $Result.Error = $_.Exception.GetBaseException().Message
+        Write-TeamsLog "Update check failed: $($Result.Error)"
+    }
+    return $Result
+}
+
+function Invoke-TeamsUpdateCheckMenu {
+    $Result = Invoke-TeamsUpdateCheckNow
+    if ($Result.Error) {
+        [void](Show-TeamsMessageBox -Text ($Messages.UpdateCheckFailed -f $Result.Error) -Caption $Messages.AppName -Icon Warning)
+    }
+    elseif ($Result.Newer) {
+        # Asks whether to install it, or opens the release page
+        Invoke-TeamsUpdateAction
+    }
+    else {
+        [void](Show-TeamsMessageBox -Text ($Messages.UpdateCheckLatest -f $AppVersion) -Caption $Messages.AppName -Icon Information)
+    }
+}
+
 function Invoke-TeamsUpdateCheck {
     $Task = $State.UpdateTask
     if ($Task) {
@@ -433,23 +498,7 @@ function Invoke-TeamsUpdateCheck {
         $State.UpdateTask = $null
         if ($Task.Status -eq [System.Threading.Tasks.TaskStatus]::RanToCompletion) {
             try {
-                $Release = $Task.Result | ConvertFrom-Json
-                $Latest = ([string]$Release.tag_name).TrimStart('v')
-                if ($Latest -and (Test-TeamsNewerVersion $Latest $AppVersion) -and $Latest -ne $State.UpdateVersion -and -not $State.Updating) {
-                    $State.UpdateVersion = $Latest
-                    # Install from the app only if the download can be checked
-                    $Asset = @($Release.assets | Where-Object { $_.name -eq $ReleaseAssetName }) | Select-Object -First 1
-                    $State.UpdateAssetUrl = if ($SigningCertificateSha256 -and $Asset -and ([string]$Asset.browser_download_url).StartsWith('https://')) {
-                        [string]$Asset.browser_download_url
-                    }
-                    else {
-                        $null
-                    }
-                    Write-TeamsLog "Update available: $Latest$(if ($State.UpdateAssetUrl) { ' (can be installed from the app)' })"
-                    Set-TeamsUpdateItem
-                    $Balloon = if ($State.UpdateAssetUrl) { $Messages.UpdateBalloonInstall } else { $Messages.UpdateBalloon }
-                    $Tray.ShowBalloonTip(10000, $Messages.AppName, ($Balloon -f $Latest), [System.Windows.Forms.ToolTipIcon]::Info)
-                }
+                [void](Set-TeamsLatestRelease $Task.Result)
             }
             catch {
                 Write-TeamsLog "Update check failed: $($_.Exception.Message)"
@@ -474,7 +523,7 @@ function Open-TeamsSettings {
     }
     $State.SettingsOpen = $true
     try {
-        $Result = Show-TeamsSettingsDialog -Settings $Config -Autostart (Get-TeamsAutostart) -Diagnostics { Get-TeamsDiagnostics }
+        $Result = Show-TeamsSettingsDialog -Settings $Config -Autostart (Get-TeamsAutostart) -Diagnostics { Get-TeamsDiagnostics } -CheckUpdates { Invoke-TeamsUpdateCheckNow }
         if ($Result) {
             Save-TeamsSettings $Result.Settings
             Set-TeamsAutostart $Result.Autostart
@@ -857,6 +906,7 @@ $ExitItem.Add_Click({ Exit-TeamsBusyLight })
 $ResumeItem.Add_Click({ Resume-TeamsSending })
 $UseTeamsItem.Add_Click({ Clear-TeamsManualState })
 $UpdateItem.Add_Click({ Invoke-TeamsUpdateAction })
+$CheckUpdatesItem.Add_Click({ Invoke-TeamsUpdateCheckMenu })
 $Tray.Add_BalloonTipClicked({ Invoke-TeamsUpdateAction })
 $Tray.Add_DoubleClick({ Open-TeamsSettings })
 # Show the menu on a left click as well

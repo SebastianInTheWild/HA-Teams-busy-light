@@ -100,6 +100,18 @@ enum L {
     }
     static let openReleasePage = t("Open Release Page", "Release-Seite öffnen")
     static let checkForUpdates = t("Check for updates daily", "Täglich nach Updates suchen")
+    static let menuCheckForUpdates = t("Check for Updates…", "Nach Updates suchen …")
+    static let checkForUpdatesNow = t("Check for Updates", "Nach Updates suchen")
+    static func updateCheckLatest(_ version: String) -> String {
+        t("You have the latest version (\(version)).", "Du hast die neueste Version (\(version)).")
+    }
+    static func updateCheckAvailable(_ version: String) -> String {
+        t("Version \(version) is available – install it from the menu.",
+          "Version \(version) ist verfügbar – über das Menü installieren.")
+    }
+    static func updateCheckFailed(_ reason: String) -> String {
+        t("Checking for updates failed: \(reason)", "Suche nach Updates fehlgeschlagen: \(reason)")
+    }
 
     // Settings
     static func version(_ version: String) -> String { "Version \(version)" }
