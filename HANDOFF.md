@@ -15,10 +15,10 @@ Assistant“), Windows 6 (eigener Status wird gesendet, `source: manual`) ✅.
 1.5.0 gesetzt, im Repo nicht). Sicherung der alten: `/config/teams_status.bak-1.4.0` →
 nach dem Release über HACS auf 1.5.0 und die Sicherung löschen.
 
-Noch offen vor Release: Windows 8 (Beenden → `offline`), 9 (CPU), Store-App/mehrere Apps
-gleichzeitig nur vor Ort; Mac: Tabs ansehen, Teams-Anruf, Schalter aus, „Hey Siri“.
-Frage an User offen: neue Windows-Binärsensoren haben Bereichs-Präfix (`buro_…`) –
-umbenennen?
+Windows 8 (Beenden → `offline`, Kamera/Mikrofon `off` in HA) ✅ und 9 (CPU-Last nicht
+spürbar) ✅ (User). Bereichs-Präfix `buro_…` bleibt (neues HA-Schema, User).
+Noch offen: Mac (Tabs ansehen, Teams-Anruf, Schalter aus, „Hey Siri“); nur vor Ort:
+Windows mit echter Kamera, mehrere Apps gleichzeitig.
 
 ## Stand 14.11.2026 – weiter am Montag, 16.11.2026
 
