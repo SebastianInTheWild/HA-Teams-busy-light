@@ -114,6 +114,7 @@
     "LogManualStatusAlways": "Status set manually: {0}",
     "LogManualEnded": "Manual status ended, using the Teams status",
     "LogCameraOn": "Camera in use: {0}",
+    "LogCameraOnNoApp": "Camera in use",
     "LogCameraOff": "Camera no longer in use",
     "LogMicrophoneOn": "Microphone in use: {0}",
     "LogMicrophoneOff": "Microphone no longer in use",

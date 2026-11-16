@@ -366,16 +366,29 @@ $ManualStatuses = @('available', 'busy', 'do_not_disturb', 'be_right_back', 'awa
 # - Camera: Windows has no such interface. Older Windows versions record the
 #   use per app in the registry for the privacy settings ("recently used"):
 #   an app uses the device while LastUsedTimeStop is 0. Newer Windows 11
-#   versions keep this in a database only the system can read; the camera is
-#   then unknown ($null) and not sent.
+#   versions keep this in a database only the system can read; then the
+#   events of the camera service are used (experimental, without app name,
+#   see Get-TeamsCameraFromEvents). Without both the camera is unknown ($null)
+#   and not sent.
 #   The registry is also the fallback for the microphone.
 function Get-TeamsDeviceUsage {
     $Camera = Get-TeamsDeviceUsers 'webcam'
     $Result = @{
-        Camera = if ($Camera.Tracked) { $Camera.Apps.Count -gt 0 } else { $null }
+        Camera = $null
         CameraApps = $Camera.Apps
+        CameraSource = 'none'
         MicrophoneApps = @()
         MicrophoneSource = 'audio system'
+    }
+    if ($Camera.Tracked) {
+        $Result.Camera = $Camera.Apps.Count -gt 0
+        $Result.CameraSource = 'registry'
+    }
+    else {
+        $Result.Camera = Get-TeamsCameraFromEvents
+        if ($null -ne $Result.Camera) {
+            $Result.CameraSource = 'camera service events (experimental)'
+        }
     }
     $Apps = Get-TeamsMicrophoneUsers
     if ($null -eq $Apps) {
@@ -520,6 +533,70 @@ function Get-TeamsMicrophoneUsers {
     })
     # The comma keeps an empty list from turning into $null
     return , @($Names | Sort-Object -Unique)
+}
+
+# Camera in use according to the camera service (Frame Server), for Windows
+# versions that no longer record it in the registry. Experimental: the service
+# writes no documented "camera on/off" event, so this relies on its watchdog
+# events (ID 11) in the diagnostic log Camera_FrameServer, which a normal user
+# may read. For the camera device (TimerScope 2) the operation is 2 when a
+# stream starts and 3 when it stops; the newest event per device object counts,
+# the camera is on while any object last started. Observed on Windows 11 26H2
+# (16.11.2026). When the service is not running, the camera is off.
+# Returns $null when the log is missing, turned off or unreadable.
+$TeamsCameraEventLog = 'Microsoft-Windows-MF-FrameServer/Camera_FrameServer'
+
+function Get-TeamsCameraFromEvents {
+    if ($null -eq $script:TeamsCameraEventLogEnabled) {
+        try {
+            $LogConfig = New-Object System.Diagnostics.Eventing.Reader.EventLogConfiguration($TeamsCameraEventLog)
+            $script:TeamsCameraEventLogEnabled = $LogConfig.IsEnabled
+            $LogConfig.Dispose()
+        }
+        catch {
+            $script:TeamsCameraEventLogEnabled = $false
+        }
+    }
+    if (-not $script:TeamsCameraEventLogEnabled) {
+        return $null
+    }
+    $Service = Get-Service -Name 'FrameServer' -ErrorAction SilentlyContinue
+    if (-not $Service) {
+        return $null
+    }
+    if ($Service.Status -ne 'Running') {
+        return $false
+    }
+    $Reader = $null
+    try {
+        $Query = New-Object System.Diagnostics.Eventing.Reader.EventLogQuery($TeamsCameraEventLog, [System.Diagnostics.Eventing.Reader.PathType]::LogName, '*[System[EventID=11]]')
+        $Query.ReverseDirection = $true
+        $Reader = New-Object System.Diagnostics.Eventing.Reader.EventLogReader($Query)
+        $LastOperation = @{}
+        for ($Index = 0; $Index -lt 30; $Index++) {
+            $Record = $Reader.ReadEvent()
+            if (-not $Record) { break }
+            try {
+                $Values = $Record.Properties
+                if ($Values.Count -ge 3 -and "$($Values[0].Value)" -eq '2') {
+                    $Device = "$($Values[1].Value)"
+                    if (-not $LastOperation.ContainsKey($Device)) {
+                        $LastOperation[$Device] = "$($Values[2].Value)"
+                    }
+                }
+            }
+            finally {
+                $Record.Dispose()
+            }
+        }
+        return ($LastOperation.Values -contains '2')
+    }
+    catch {
+        return $null
+    }
+    finally {
+        if ($Reader) { $Reader.Dispose() }
+    }
 }
 
 # Apps using a device according to the registry. Tracked is false when this

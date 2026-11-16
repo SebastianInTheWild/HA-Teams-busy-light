@@ -53,7 +53,20 @@ einmal ~200 ms, danach ~3 ms je Prüfung), Registry nur noch Rückfall. Kamera: 
 (`$null`), wenn Windows keine `LastUsedTimeStart` mehr schreibt → wird nicht gesendet, HA
 bleibt „unbekannt“, auch bei `offline` (`Get-TeamsOfflineExtra`). Diagnose zeigt die Quelle.
 Echter Test per RDP ✅: Sprachrekorder („VoiceRecorder“) und Edge („msedge“) an/aus, HA
-`in_call`/`not_in_call` passend. Nächster Schritt: Kamera-Erkennung für neue Windows prüfen.
+`in_call`/`not_in_call` passend.
+
+**Kamera (16.11., User: Variante 1 = experimentell in 1.5.0, keine neue Einstellung – gleich
+wie Mac):** Ereignis-Kanal `Microsoft-Windows-MF-FrameServer/Camera_FrameServer` (für
+normale Benutzer lesbar, kein dokumentiertes An/Aus). Watchdog-Ereignis 11, TimerScope 2 =
+Kamera-Gerät: Vorgang 2 = Stream startet, 3 = Stream endet; je Geräte-Objekt (Property 1)
+zählt das neueste, an = irgendein Objekt zuletzt 2. Dienst `FrameServer` beendet → aus.
+Kanal aus/fehlt → `$null` (unbekannt). `Get-TeamsCameraFromEvents`, `EventLogReader`
+rückwärts, 30 Ereignisse, ~5 ms. Kein App-Name → Log „Kamera in Benutzung“ (neuer Text
+`LogCameraOnNoApp`). Diagnose zeigt die Kamera-Quelle.
+Test per RDP ✅: Kamera-App an/aus, Edge an/aus (kurzes Aus, wenn die Seite den Stream
+selbst neu startet – echt, kein Fehler). Zwei Apps gleichzeitig mit RDP-Kamera nicht
+testbar (die Kamera bedient nur eine App; Edge bekam sie erst nach Schließen der
+Kamera-App). **Vor Ort mit echter Kamera prüfen:** gleiche Ereignisse? Zwei Apps gleichzeitig?
 
 ## Entscheidungen (mit dem User, 13.11.2026)
 

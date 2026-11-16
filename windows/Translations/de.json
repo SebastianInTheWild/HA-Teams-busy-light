@@ -114,6 +114,7 @@
     "LogManualStatusAlways": "Status manuell gesetzt: {0}",
     "LogManualEnded": "Manueller Status beendet, Teams-Status wird verwendet",
     "LogCameraOn": "Kamera in Benutzung: {0}",
+    "LogCameraOnNoApp": "Kamera in Benutzung",
     "LogCameraOff": "Kamera nicht mehr in Benutzung",
     "LogMicrophoneOn": "Mikrofon in Benutzung: {0}",
     "LogMicrophoneOff": "Mikrofon nicht mehr in Benutzung",

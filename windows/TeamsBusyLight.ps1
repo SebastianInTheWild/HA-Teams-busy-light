@@ -81,6 +81,7 @@ $State = @{
     Microphone = $false
     MicrophoneApps = @()
     MicrophoneSource = $null
+    CameraSource = $null
     Manual = Get-TeamsManualStatus
     Language = $null
     # What was sent last (status, activity, camera, microphone, source)
@@ -552,10 +553,15 @@ function Update-TeamsState {
 
     $Devices = Get-TeamsDeviceUsage
     $State.MicrophoneSource = $Devices.MicrophoneSource
+    $State.CameraSource = $Devices.CameraSource
     if ($Devices.Camera -ne $State.Camera) {
+        $WasOn = $State.Camera -eq $true
         $State.Camera = $Devices.Camera
-        if ($null -ne $Devices.Camera) {
-            Write-TeamsLog $(if ($Devices.Camera) { $Messages.LogCameraOn -f ($Devices.CameraApps -join ', ') } else { $Messages.LogCameraOff })
+        if ($Devices.Camera) {
+            Write-TeamsLog $(if ($Devices.CameraApps.Count) { $Messages.LogCameraOn -f ($Devices.CameraApps -join ', ') } else { $Messages.LogCameraOnNoApp })
+        }
+        elseif ($WasOn) {
+            Write-TeamsLog $Messages.LogCameraOff
         }
         $Changed = $true
     }
@@ -663,7 +669,7 @@ function Get-TeamsDiagnostics {
         "Teams status:     $(if ($State.Status) { $State.Status } else { '-' })"
         "Teams activity:   $($State.TeamsActivity)"
         "Manual status:    $Manual"
-        "Camera in use:    $(if ($null -eq $State.Camera) { 'unknown (not reported by this Windows version)' } elseif ($State.Camera) { 'yes' } else { 'no' })"
+        "Camera in use:    $(if ($null -eq $State.Camera) { 'unknown (not reported by this Windows version)' } elseif ($State.Camera) { 'yes' } else { 'no' }) (from $($State.CameraSource))"
         "Microphone:       $(if ($null -eq $State.Microphone) { 'unknown' } elseif ($State.Microphone) { 'in use by ' + ($State.MicrophoneApps -join ', ') } else { 'not in use' }) (from $($State.MicrophoneSource))"
         "Other calls:      $(if ($Config.DetectOtherCalls) { 'on' } else { 'off' })"
         "Effective:        status $(Get-TeamsEffectiveStatus), activity $($State.Activity)"
