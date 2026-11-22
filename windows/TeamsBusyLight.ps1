@@ -750,7 +750,7 @@ function Get-TeamsDiagnostics {
         "Teams Busy Light $AppVersion (Windows tray app)"
         "Windows:          $Os, PowerShell $($PSVersionTable.PSVersion), $([CultureInfo]::CurrentUICulture.Name)"
         "Signature pin:    $(if ($SigningCertificateSha256) { 'set (in-app updates)' } else { 'none' })"
-        "Update channel:   $(if ($Config.PreReleases) { 'with pre-releases' } else { 'releases' })"
+        "Update channel:   $(if ($Config.PreReleases) { 'beta (pre-releases)' } else { 'release' })"
         "Update available: $(if ($State.UpdateVersion) { $State.UpdateVersion } else { 'no' })"
         ''
         "Teams running:    $(& $YesNo $Teams)$(if ($Teams) { ', version ' + $Teams.FileVersion })"

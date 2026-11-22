@@ -27,7 +27,7 @@ $ShowSettingsEventName = 'Local\TeamsBusyLight.ShowSettings'
 $ExitEventName = 'Local\TeamsBusyLight.Exit'
 $ReleasesPage = 'https://github.com/SebastianInTheWild/HA-Teams-busy-light/releases/latest'
 $ReleasesApi = 'https://api.github.com/repos/SebastianInTheWild/HA-Teams-busy-light/releases/latest'
-# With "Also install pre-releases": the newest releases including pre-releases
+# Update channel "Beta": the newest releases including pre-releases
 $ReleasesListApi = 'https://api.github.com/repos/SebastianInTheWild/HA-Teams-busy-light/releases?per_page=30'
 # The Windows download contains a catalog with the hashes of all its files,
 # signed with our own certificate (windows/tools/create-signing-certificate.ps1).
@@ -1325,10 +1325,26 @@ function Show-TeamsSettingsDialog {
     $Y = $AutostartInput.Bottom + 2
     $UpdatesInput = & $AddCheckBox $GeneralPage $Messages.CheckForUpdates $Y ([bool]$Settings.CheckForUpdates)
     $Y = $UpdatesInput.Bottom + 2
-    $PreReleasesInput = & $AddCheckBox $GeneralPage $Messages.PreReleases $Y ([bool]$Settings.PreReleases)
-    $Y = $PreReleasesInput.Bottom
-    $Hint = & $AddLabel $GeneralPage $Messages.PreReleasesHint ($PageMargin + 18) $Y ($PageWidth - 18) -Hint
-    $Y = $Hint.Bottom + 6
+    $Y += 8
+    # Update channel: 0 = release, 1 = beta (also pre-releases)
+    [void](& $AddLabel $GeneralPage $Messages.UpdateChannel $PageMargin $Y $PageWidth)
+    $Y += 24
+    $ChannelInput = New-Object System.Windows.Forms.ComboBox
+    $ChannelInput.Location = New-Object System.Drawing.Point($PageMargin, $Y)
+    $ChannelInput.Size = New-Object System.Drawing.Size($ColumnWidth, 27)
+    $ChannelInput.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
+    [void]$ChannelInput.Items.AddRange(@($Messages.UpdateChannelRelease, $Messages.UpdateChannelBeta))
+    $ChannelInput.SelectedIndex = if ($Settings.PreReleases) { 1 } else { 0 }
+    $GeneralPage.Controls.Add($ChannelInput)
+    # A result of "Check for updates" belongs to the channel it was made with
+    $ChannelInput.Add_SelectedIndexChanged({
+        if ($CheckUpdatesResult) {
+            $CheckUpdatesResult.Text = ''
+        }
+    })
+    $Y = $ChannelInput.Bottom + 4
+    $Hint = & $AddLabel $GeneralPage $Messages.UpdateChannelHint $PageMargin $Y $PageWidth -Hint
+    $Y = $Hint.Bottom + 10
     $CheckUpdatesButton = $null
     $CheckUpdatesResult = $null
     if ($CheckUpdates) {
@@ -1504,7 +1520,7 @@ function Show-TeamsSettingsDialog {
             $Form.Refresh()
             try {
                 # With the channel as chosen in the window, also before saving
-                $Check = & $CheckUpdates $PreReleasesInput.Checked
+                $Check = & $CheckUpdates ($ChannelInput.SelectedIndex -eq 1)
                 if ($Check.Error) {
                     $CheckUpdatesResult.ForeColor = [System.Drawing.Color]::FromArgb(170, 40, 40)
                     $CheckUpdatesResult.Text = $Messages.UpdateCheckFailed -f $Check.Error
@@ -1569,7 +1585,7 @@ function Show-TeamsSettingsDialog {
                 PollSeconds = [int]$PollInput.Value
                 TeamsLanguage = $LanguageCodes[$LanguageInput.SelectedIndex]
                 CheckForUpdates = $UpdatesInput.Checked
-                PreReleases = $PreReleasesInput.Checked
+                PreReleases = ($ChannelInput.SelectedIndex -eq 1)
                 HomeNetworks = $Networks
                 AskForNewNetworks = $AskNetworksInput.Checked
                 IgnoredNetworks = [string]$Settings.IgnoredNetworks

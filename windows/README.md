@@ -115,7 +115,7 @@ Open **Settings…** in the menu of the tray icon or **Teams Busy Light** in the
 | Also detect calls in other apps | on | Reports a call while any app uses the microphone (Zoom, Webex, a browser …). Camera and microphone are sent to Home Assistant in any case, no permission needed: the microphone from the Windows audio system, the camera from the Windows privacy settings. Newer Windows 11 versions (e.g. 26H2) no longer report the camera there; the app then reads it from the events of the Windows camera service (experimental, without app name). If that log (`Microsoft-Windows-MF-FrameServer/Camera_FrameServer`) is turned off, the camera stays unknown in Home Assistant |
 | Start when I sign in to Windows | on | Start the app at sign-in |
 | Check for updates daily | on | Shows a menu entry and a notification when a new release is available; after confirmation the app downloads, checks and installs it |
-| Also install pre-releases (beta) | off | For testing: also offers pre-releases (`1.7.0-beta.1` …), which come before a release. Turned off again, the next release is offered as usual |
+| Update channel | Release | **Beta (pre-releases)** is for testing: also offers pre-releases (`1.7.0-beta.1` …), which come before a release. Back on **Release**, the next release is offered as usual |
 
 **Pause sending** in the menu of the tray icon stops sending for 1 hour, 8 hours, 1 day or
 until **Resume sending**; Home Assistant gets `offline` once. The pause is kept when the app

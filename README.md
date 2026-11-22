@@ -206,7 +206,7 @@ Every push is tested and then published by the release workflow:
   `manifest.json` is newer than the latest release. Without a bump, nothing is published.
 
 Each release is created as a draft and published only once the Windows and macOS downloads
-are attached. The apps offer only releases; with **Also install pre-releases (beta)** in the
+are attached. The apps offer only releases; with the **Update channel** **Beta (pre-releases)** in the
 settings also pre-releases. In HACS, turn on **Show beta versions** for the integration to
 get them in Home Assistant.
 

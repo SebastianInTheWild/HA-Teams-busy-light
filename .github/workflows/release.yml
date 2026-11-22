@@ -10,7 +10,7 @@ name: Release
 #
 # The release is created as a draft and published only once both app
 # downloads are attached, so the apps never see a release without them.
-# The apps offer releases; with "Also install pre-releases" also betas.
+# The apps offer releases; with the update channel "Beta" also pre-releases.
 
 on:
   push:
@@ -143,7 +143,7 @@ jobs:
             base=${VERSION%%-*}
             {
               echo "Pre-release for testing, from the branch \`$GITHUB_REF_NAME\` ($GITHUB_SHA)."
-              echo "The apps offer it with \"Also install pre-releases (beta)\"; HACS with \"Show beta versions\"."
+              echo "The apps offer it with the update channel \"Beta (pre-releases)\"; HACS with \"Show beta versions\"."
               echo
               section "$base"
               section Unreleased

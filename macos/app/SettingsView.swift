@@ -110,10 +110,12 @@ struct SettingsView: View {
                     Section {
                         Toggle(L.autostart, isOn: $model.autostart)
                         Toggle(L.checkForUpdates, isOn: $model.checkForUpdates)
-                        Toggle(isOn: $model.preReleases) {
-                            Text(L.preReleases)
-                            Text(L.preReleasesHint)
+                        Picker(L.updateChannel, selection: $model.preReleases) {
+                            Text(L.updateChannelRelease).tag(false)
+                            Text(L.updateChannelBeta).tag(true)
                         }
+                        .pickerStyle(.menu)
+                        // A result of "Check for Updates" belongs to the channel it was made with
                         .onChange(of: model.preReleases) { _ in model.updateCheckResult = nil }
                         HStack {
                             Button(L.checkForUpdatesNow, action: checkUpdates)
@@ -127,6 +129,8 @@ struct SettingsView: View {
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                         }
+                    } footer: {
+                        hint(L.updateChannelHint)
                     }
                 }
                 .tabItem { Text(L.tabGeneral) }
