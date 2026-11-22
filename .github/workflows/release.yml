@@ -119,17 +119,11 @@ jobs:
             echo "$TAG exists already (run repeated)"
             exit 0
           fi
-          if [ "$PRERELEASE" = true ]; then
-            # The pre-release reports its own version (integration and apps),
-            # in a commit that is only reachable through the tag
-            base=$(jq -r .version custom_components/teams_status/manifest.json)
-            sed -i "s/\"version\": \"$base\"/\"version\": \"$VERSION\"/" custom_components/teams_status/manifest.json
-            test "$(jq -r .version custom_components/teams_status/manifest.json)" = "$VERSION"
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -q -am "Pre-release $VERSION"
-          fi
-          git tag "$TAG"
+          # On the pushed commit itself: GitHub does not let the workflow push
+          # commits of its own here (workflow files). The apps get the
+          # pre-release version when they are built; the integration keeps
+          # the version of manifest.json and compares only that part.
+          git tag "$TAG" "$GITHUB_SHA"
           git push origin "$TAG"
 
       - name: Release notes
