@@ -29,6 +29,7 @@ enum Diagnostics {
             "Teams Busy Light \(updateChecker.currentVersion) (macOS app)",
             "macOS:            \(process.operatingSystemVersionString), \(architecture)",
             "Signature:        \(Updater.isSupported ? "certificate (in-app updates)" : "ad hoc (no in-app updates)")",
+            "Update channel:   \(settings.preReleases ? "with pre-releases" : "releases")",
             "Update available: \(updateChecker.availableVersion ?? "no")",
             "",
             "Teams running:    \(yesNo(Teams.isRunning))",

@@ -102,6 +102,7 @@ Open **Settings…** in the menu (or double-click the app in `~/Applications`):
 | Also detect calls in other apps | on | Reports a call while any app records from the microphone (Zoom, Webex, FaceTime, a browser …). Camera and microphone are sent to Home Assistant in any case; macOS asks for no permission (only the "in use" state is read) |
 | Start at login | on | Start the app after login |
 | Check for updates daily | on | Shows a menu entry and a notification when a new release is available; after confirmation the app downloads, checks and installs it |
+| Also install pre-releases (beta) | off | For testing: also offers pre-releases (`1.7.0-beta.1` …), which come before a release. Turned off again, the next release is offered as usual |
 
 **Pause Sending** in the menu stops sending for 1 hour, 8 hours, 1 day or until **Resume
 Sending**; Home Assistant gets `offline` once. The pause is kept when the app restarts. The

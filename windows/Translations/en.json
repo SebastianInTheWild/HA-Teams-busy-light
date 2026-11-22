@@ -89,6 +89,8 @@
     "Autostart": "Start Teams Busy Light when I sign in to Windows",
     "CheckForUpdates": "Check for updates daily",
     "CheckUpdatesNow": "Check for updates",
+    "PreReleases": "Also install pre-releases (beta)",
+    "PreReleasesHint": "For testing: pre-releases come before a release and can still contain errors. Without the check mark, only releases are offered.",
     "Test": "Send test",
     "Testing": "Sending...",
     "TestOk": "Sent: {0}. Check the sensor in Home Assistant.",

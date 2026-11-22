@@ -27,6 +27,8 @@ $ShowSettingsEventName = 'Local\TeamsBusyLight.ShowSettings'
 $ExitEventName = 'Local\TeamsBusyLight.Exit'
 $ReleasesPage = 'https://github.com/SebastianInTheWild/HA-Teams-busy-light/releases/latest'
 $ReleasesApi = 'https://api.github.com/repos/SebastianInTheWild/HA-Teams-busy-light/releases/latest'
+# With "Also install pre-releases": the newest releases including pre-releases
+$ReleasesListApi = 'https://api.github.com/repos/SebastianInTheWild/HA-Teams-busy-light/releases?per_page=30'
 # The Windows download contains a catalog with the hashes of all its files,
 # signed with our own certificate (windows/tools/create-signing-certificate.ps1).
 # Updates are installed only if the catalog is signed with the certificate
@@ -250,6 +252,7 @@ function Read-TeamsSettings {
         PollSeconds = 2
         TeamsLanguage = 'auto'
         CheckForUpdates = $true
+        PreReleases = $false
         HomeNetworks = ''
         AskForNewNetworks = $true
         IgnoredNetworks = ''
@@ -272,6 +275,7 @@ function Read-TeamsSettings {
     $Values.HeartbeatSeconds = [Math]::Min([Math]::Max([int]$Values.HeartbeatSeconds, 10), 3600)
     $Values.PollSeconds = [Math]::Min([Math]::Max([int]$Values.PollSeconds, 1), 60)
     $Values.CheckForUpdates = [bool]$Values.CheckForUpdates
+    $Values.PreReleases = [bool]$Values.PreReleases
     $Values.HomeNetworks = ([string]$Values.HomeNetworks).Trim()
     $Values.AskForNewNetworks = [bool]$Values.AskForNewNetworks
     $Values.IgnoredNetworks = ([string]$Values.IgnoredNetworks).Trim()
@@ -674,18 +678,74 @@ function Get-TeamsOfflineExtra {
     return $Extra
 }
 
-# True if version a is newer than version b (e.g. "1.10.0" > "1.9.2")
-function Test-TeamsNewerVersion {
-    param([string]$Candidate, [string]$Current)
+# Compares two versions like SemVer: 1 if a is newer, -1 if older, 0 if equal.
+# "1.10.0" > "1.9.2", and a pre-release comes before its version:
+# "1.6.0-beta.2" < "1.6.0-beta.10" < "1.6.0".
+function Compare-TeamsVersion {
+    param([string]$First, [string]$Second)
 
-    $A = @($Candidate.TrimStart('v').Split('.') | ForEach-Object { [int]($_ -replace '\D', '0') })
-    $B = @($Current.TrimStart('v').Split('.') | ForEach-Object { [int]($_ -replace '\D', '0') })
+    $PartsA = $First.Trim().TrimStart('v').Split(@('-'), 2, [System.StringSplitOptions]::None)
+    $PartsB = $Second.Trim().TrimStart('v').Split(@('-'), 2, [System.StringSplitOptions]::None)
+    $A = @($PartsA[0].Split('.') | ForEach-Object { [int]($_ -replace '\D', '0') })
+    $B = @($PartsB[0].Split('.') | ForEach-Object { [int]($_ -replace '\D', '0') })
     for ($Index = 0; $Index -lt [Math]::Max($A.Count, $B.Count); $Index++) {
         $X = if ($Index -lt $A.Count) { $A[$Index] } else { 0 }
         $Y = if ($Index -lt $B.Count) { $B[$Index] } else { 0 }
-        if ($X -ne $Y) { return $X -gt $Y }
+        if ($X -ne $Y) { return $(if ($X -gt $Y) { 1 } else { -1 }) }
     }
-    return $false
+
+    $PreA = if ($PartsA.Count -gt 1) { $PartsA[1] } else { '' }
+    $PreB = if ($PartsB.Count -gt 1) { $PartsB[1] } else { '' }
+    if ($PreA -eq $PreB) { return 0 }
+    if (-not $PreA) { return 1 }
+    if (-not $PreB) { return -1 }
+    $IdsA = $PreA.Split('.')
+    $IdsB = $PreB.Split('.')
+    for ($Index = 0; $Index -lt [Math]::Max($IdsA.Count, $IdsB.Count); $Index++) {
+        if ($Index -ge $IdsA.Count) { return -1 }
+        if ($Index -ge $IdsB.Count) { return 1 }
+        $NumberA = 0
+        $NumberB = 0
+        $IsNumberA = [int]::TryParse($IdsA[$Index], [ref]$NumberA)
+        $IsNumberB = [int]::TryParse($IdsB[$Index], [ref]$NumberB)
+        if ($IsNumberA -and $IsNumberB) {
+            if ($NumberA -ne $NumberB) { return $(if ($NumberA -gt $NumberB) { 1 } else { -1 }) }
+        }
+        elseif ($IsNumberA -ne $IsNumberB) {
+            # Numbers come before words
+            return $(if ($IsNumberA) { -1 } else { 1 })
+        }
+        else {
+            $Order = [string]::CompareOrdinal($IdsA[$Index], $IdsB[$Index])
+            if ($Order -ne 0) { return $(if ($Order -gt 0) { 1 } else { -1 }) }
+        }
+    }
+    return 0
+}
+
+# True if version a is newer than version b (see Compare-TeamsVersion)
+function Test-TeamsNewerVersion {
+    param([string]$Candidate, [string]$Current)
+
+    return (Compare-TeamsVersion $Candidate $Current) -gt 0
+}
+
+# Picks the newest published release from an answer of the GitHub API: one
+# release (releases/latest) or a list (releases, with pre-releases)
+function Select-TeamsNewestRelease {
+    param([string]$Json)
+
+    $Newest = $null
+    # Piping enumerates a list and passes a single release as it is
+    foreach ($Release in @($Json | ConvertFrom-Json | ForEach-Object { $_ })) {
+        if ($Release.draft -or -not ([string]$Release.tag_name).TrimStart('v')) {
+            continue
+        }
+        if (-not $Newest -or (Test-TeamsNewerVersion ([string]$Release.tag_name) ([string]$Newest.tag_name))) {
+            $Newest = $Release
+        }
+    }
+    return $Newest
 }
 
 # Test-FileCatalog/New-FileCatalog: load the module of this PowerShell
@@ -1264,7 +1324,11 @@ function Show-TeamsSettingsDialog {
     $AutostartInput = & $AddCheckBox $GeneralPage $Messages.Autostart $Y $Autostart
     $Y = $AutostartInput.Bottom + 2
     $UpdatesInput = & $AddCheckBox $GeneralPage $Messages.CheckForUpdates $Y ([bool]$Settings.CheckForUpdates)
-    $Y = $UpdatesInput.Bottom + 6
+    $Y = $UpdatesInput.Bottom + 2
+    $PreReleasesInput = & $AddCheckBox $GeneralPage $Messages.PreReleases $Y ([bool]$Settings.PreReleases)
+    $Y = $PreReleasesInput.Bottom
+    $Hint = & $AddLabel $GeneralPage $Messages.PreReleasesHint ($PageMargin + 18) $Y ($PageWidth - 18) -Hint
+    $Y = $Hint.Bottom + 6
     $CheckUpdatesButton = $null
     $CheckUpdatesResult = $null
     if ($CheckUpdates) {
@@ -1439,7 +1503,8 @@ function Show-TeamsSettingsDialog {
             $Form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
             $Form.Refresh()
             try {
-                $Check = & $CheckUpdates
+                # With the channel as chosen in the window, also before saving
+                $Check = & $CheckUpdates $PreReleasesInput.Checked
                 if ($Check.Error) {
                     $CheckUpdatesResult.ForeColor = [System.Drawing.Color]::FromArgb(170, 40, 40)
                     $CheckUpdatesResult.Text = $Messages.UpdateCheckFailed -f $Check.Error
@@ -1504,6 +1569,7 @@ function Show-TeamsSettingsDialog {
                 PollSeconds = [int]$PollInput.Value
                 TeamsLanguage = $LanguageCodes[$LanguageInput.SelectedIndex]
                 CheckForUpdates = $UpdatesInput.Checked
+                PreReleases = $PreReleasesInput.Checked
                 HomeNetworks = $Networks
                 AskForNewNetworks = $AskNetworksInput.Checked
                 IgnoredNetworks = [string]$Settings.IgnoredNetworks

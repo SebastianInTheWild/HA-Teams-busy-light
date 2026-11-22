@@ -102,6 +102,11 @@ enum L {
     static let checkForUpdates = t("Check for updates daily", "Täglich nach Updates suchen")
     static let menuCheckForUpdates = t("Check for Updates…", "Nach Updates suchen …")
     static let checkForUpdatesNow = t("Check for Updates", "Nach Updates suchen")
+    static let preReleases = t("Also install pre-releases (beta)", "Auch Vorabversionen (Beta) installieren")
+    static let preReleasesHint = t(
+        "For testing: pre-releases come before a release and can still contain errors. Without it, only releases are offered.",
+        "Zum Testen: Vorabversionen kommen vor einem Release und können noch Fehler enthalten. Ohne Haken werden nur Releases angeboten."
+    )
     static func updateCheckLatest(_ version: String) -> String {
         t("You have the latest version (\(version)).", "Du hast die neueste Version (\(version)).")
     }

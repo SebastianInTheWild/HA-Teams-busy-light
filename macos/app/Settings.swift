@@ -8,6 +8,8 @@ struct AppSettings: Equatable {
     var heartbeatSeconds = 60
     var pollSeconds = 2
     var checkForUpdates = true
+    /// Also offer pre-releases (beta) as updates
+    var preReleases = false
     /// Send only while the Mac is in one of these networks (CIDR, comma
     /// separated); empty = everywhere
     var homeNetworks = ""
@@ -23,6 +25,7 @@ struct AppSettings: Equatable {
         static let heartbeatSeconds = "heartbeatSeconds"
         static let pollSeconds = "pollSeconds"
         static let checkForUpdates = "checkForUpdates"
+        static let preReleases = "preReleases"
         static let homeNetworks = "homeNetworks"
         static let askForNewNetworks = "askForNewNetworks"
         static let ignoredNetworks = "ignoredNetworks"
@@ -42,6 +45,7 @@ struct AppSettings: Equatable {
         if defaults.object(forKey: Key.checkForUpdates) != nil {
             settings.checkForUpdates = defaults.bool(forKey: Key.checkForUpdates)
         }
+        settings.preReleases = defaults.bool(forKey: Key.preReleases)
         settings.homeNetworks = (defaults.string(forKey: Key.homeNetworks) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if defaults.object(forKey: Key.askForNewNetworks) != nil {
             settings.askForNewNetworks = defaults.bool(forKey: Key.askForNewNetworks)
@@ -59,6 +63,7 @@ struct AppSettings: Equatable {
         defaults.set(heartbeatSeconds, forKey: Key.heartbeatSeconds)
         defaults.set(pollSeconds, forKey: Key.pollSeconds)
         defaults.set(checkForUpdates, forKey: Key.checkForUpdates)
+        defaults.set(preReleases, forKey: Key.preReleases)
         defaults.set(homeNetworks, forKey: Key.homeNetworks)
         defaults.set(askForNewNetworks, forKey: Key.askForNewNetworks)
         defaults.set(ignoredNetworks, forKey: Key.ignoredNetworks)

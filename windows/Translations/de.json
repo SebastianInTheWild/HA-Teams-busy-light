@@ -89,6 +89,8 @@
     "Autostart": "Teams Busy Light bei der Windows-Anmeldung starten",
     "CheckForUpdates": "Täglich nach Updates suchen",
     "CheckUpdatesNow": "Nach Updates suchen",
+    "PreReleases": "Auch Vorabversionen (Beta) installieren",
+    "PreReleasesHint": "Zum Testen: Vorabversionen kommen vor einem Release und können noch Fehler enthalten. Ohne Haken werden nur Releases angeboten.",
     "Test": "Test senden",
     "Testing": "Wird gesendet...",
     "TestOk": "Gesendet: {0}. Prüfe den Sensor in Home Assistant.",

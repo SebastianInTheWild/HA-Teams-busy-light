@@ -1,7 +1,9 @@
 name: Validate
 
+# Pushes run it through the release workflow (which publishes only after it
+# passed), so it is not started for pushes here
 on:
-  push:
+  workflow_call:
   pull_request:
   schedule:
     - cron: "0 4 * * 1"

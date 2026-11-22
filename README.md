@@ -196,6 +196,20 @@ detected by the power assertion Teams holds during the call.
 
 No long-lived access token is needed; the webhook ID is the secret – treat the URL like a password.
 
+## Releases and pre-releases
+
+Every push is tested and then published by the release workflow:
+
+- **Merge into `main`** → release `v<version>` (the version in `manifest.json`), once per
+  version. Bump the version in the branch before merging.
+- **Push to another branch** → pre-release `v<version>-beta.<n>`, as long as the version in
+  `manifest.json` is newer than the latest release. Without a bump, nothing is published.
+
+Each release is created as a draft and published only once the Windows and macOS downloads
+are attached. The apps offer only releases; with **Also install pre-releases (beta)** in the
+settings also pre-releases. In HACS, turn on **Show beta versions** for the integration to
+get them in Home Assistant.
+
 ## Add a language
 
 On Windows, the status is written to the Teams log in the language of the Teams app (macOS

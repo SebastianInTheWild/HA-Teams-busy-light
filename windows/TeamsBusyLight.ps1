@@ -103,6 +103,11 @@ $State = @{
     AskingNetwork = $false
     PausedUntil = Get-TeamsPause
     UpdateAssetUrl = $null
+    # Release page of the offered version
+    UpdatePage = $null
+    # Channel of the last check ($true = with pre-releases, $null = none yet)
+    UpdatePreReleases = $null
+    UpdateTaskPreReleases = $false
     UpdateDownload = $null
     UpdateInstaller = $null
     UpdateDir = $null
@@ -329,7 +334,7 @@ function Invoke-TeamsUpdateAction {
         return
     }
     if (-not $State.UpdateAssetUrl) {
-        Start-Process $ReleasesPage
+        Start-Process $(if ($State.UpdatePage) { $State.UpdatePage } else { $ReleasesPage })
         return
     }
     $Answer = Show-TeamsMessageBox -Text ($Messages.UpdateConfirm -f $State.UpdateVersion) -Caption $Messages.AppName `
@@ -426,45 +431,69 @@ function Clear-TeamsUpdateFolders {
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-# Applies the answer of the GitHub API (latest release). Returns the latest
-# version; a newer one is offered in the menu, with a notification unless
-# -Quiet (the user asked and gets an answer anyway).
-function Set-TeamsLatestRelease {
-    param([string]$Json, [switch]$Quiet)
+function Get-TeamsReleasesApi {
+    param([bool]$PreReleases)
 
-    $Release = $Json | ConvertFrom-Json
-    $Latest = ([string]$Release.tag_name).TrimStart('v')
+    if ($PreReleases) { $ReleasesListApi } else { $ReleasesApi }
+}
+
+# Applies the answer of the GitHub API (latest release, or the list with
+# pre-releases). Returns the latest version; a newer one is offered in the
+# menu, with a notification unless -Quiet (the user asked and gets an answer
+# anyway). Evaluated on every check, so a download added to the release later
+# (or a switch of the channel) is picked up.
+function Set-TeamsLatestRelease {
+    param([string]$Json, [bool]$PreReleases, [switch]$Quiet)
+
+    $Release = Select-TeamsNewestRelease $Json
+    $Latest = if ($Release) { ([string]$Release.tag_name).TrimStart('v') }
     if (-not $Latest) {
         throw 'no version in the answer of GitHub'
     }
-    if ((Test-TeamsNewerVersion $Latest $AppVersion) -and $Latest -ne $State.UpdateVersion -and -not $State.Updating) {
-        $State.UpdateVersion = $Latest
+    $State.UpdatePreReleases = $PreReleases
+    if ($State.Updating) {
+        return $Latest
+    }
+    $Version = $null
+    $AssetUrl = $null
+    $Page = $null
+    if (Test-TeamsNewerVersion $Latest $AppVersion) {
+        $Version = $Latest
         # Install from the app only if the download can be checked
         $Asset = @($Release.assets | Where-Object { $_.name -eq $ReleaseAssetName }) | Select-Object -First 1
-        $State.UpdateAssetUrl = if ($SigningCertificateSha256 -and $Asset -and ([string]$Asset.browser_download_url).StartsWith('https://')) {
-            [string]$Asset.browser_download_url
+        if ($SigningCertificateSha256 -and $Asset -and ([string]$Asset.browser_download_url).StartsWith('https://')) {
+            $AssetUrl = [string]$Asset.browser_download_url
         }
-        else {
-            $null
+        if (([string]$Release.html_url).StartsWith('https://github.com/')) {
+            $Page = [string]$Release.html_url
         }
-        Write-TeamsLog "Update available: $Latest$(if ($State.UpdateAssetUrl) { ' (can be installed from the app)' })"
+    }
+    if ($Version -ne $State.UpdateVersion -or $AssetUrl -ne $State.UpdateAssetUrl) {
+        $State.UpdateVersion = $Version
+        $State.UpdateAssetUrl = $AssetUrl
+        $State.UpdatePage = $Page
         Set-TeamsUpdateItem
-        if (-not $Quiet) {
-            $Balloon = if ($State.UpdateAssetUrl) { $Messages.UpdateBalloonInstall } else { $Messages.UpdateBalloon }
-            $Tray.ShowBalloonTip(10000, $Messages.AppName, ($Balloon -f $Latest), [System.Windows.Forms.ToolTipIcon]::Info)
+        if ($Version) {
+            Write-TeamsLog "Update available: $Version$(if ($AssetUrl) { ' (can be installed from the app)' })"
+            if (-not $Quiet) {
+                $Balloon = if ($AssetUrl) { $Messages.UpdateBalloonInstall } else { $Messages.UpdateBalloon }
+                $Tray.ShowBalloonTip(10000, $Messages.AppName, ($Balloon -f $Version), [System.Windows.Forms.ToolTipIcon]::Info)
+            }
         }
     }
     return $Latest
 }
 
 # "Check for updates" in the menu and the settings: asks GitHub right away
-# (also when the daily check is off) and waits for the answer.
-# Returns @{ Latest; Newer; Error }.
+# (also when the daily check is off) and waits for the answer. The settings
+# window passes the channel as chosen there. Returns @{ Latest; Newer; Error }.
 function Invoke-TeamsUpdateCheckNow {
+    param([bool]$PreReleases = [bool]$Config.PreReleases)
+
     $Result = @{ Latest = $null; Newer = $false; Error = $null }
     try {
-        $Json = $UpdateHttp.GetStringAsync($ReleasesApi).GetAwaiter().GetResult()
-        $Result.Latest = Set-TeamsLatestRelease $Json -Quiet
+        $Json = $UpdateHttp.GetStringAsync((Get-TeamsReleasesApi $PreReleases)).GetAwaiter().GetResult()
+        $Result.Latest = Set-TeamsLatestRelease $Json -PreReleases $PreReleases -Quiet
         $Result.Newer = Test-TeamsNewerVersion $Result.Latest $AppVersion
         $State.LastUpdateCheck = Get-Date
     }
@@ -498,7 +527,7 @@ function Invoke-TeamsUpdateCheck {
         $State.UpdateTask = $null
         if ($Task.Status -eq [System.Threading.Tasks.TaskStatus]::RanToCompletion) {
             try {
-                [void](Set-TeamsLatestRelease $Task.Result)
+                [void](Set-TeamsLatestRelease $Task.Result -PreReleases $State.UpdateTaskPreReleases)
             }
             catch {
                 Write-TeamsLog "Update check failed: $($_.Exception.Message)"
@@ -506,12 +535,23 @@ function Invoke-TeamsUpdateCheck {
         }
         return
     }
+    $PreReleases = [bool]$Config.PreReleases
     if (-not $Config.CheckForUpdates -or $AppVersion -eq '0.0.0') {
+        # Without the daily check, an offer from the other channel is dropped
+        if ($null -ne $State.UpdatePreReleases -and $State.UpdatePreReleases -ne $PreReleases -and -not $State.Updating) {
+            $State.UpdatePreReleases = $null
+            $State.UpdateVersion = $null
+            $State.UpdateAssetUrl = $null
+            Set-TeamsUpdateItem
+        }
         return
     }
-    if (((Get-Date) - $State.LastUpdateCheck).TotalHours -ge 24) {
+    # Checks again right away when the channel was changed
+    if (((Get-Date) - $State.LastUpdateCheck).TotalHours -ge 24 -or $State.UpdatePreReleases -ne $PreReleases) {
         $State.LastUpdateCheck = Get-Date
-        $State.UpdateTask = $UpdateHttp.GetStringAsync($ReleasesApi)
+        $State.UpdatePreReleases = $PreReleases
+        $State.UpdateTaskPreReleases = $PreReleases
+        $State.UpdateTask = $UpdateHttp.GetStringAsync((Get-TeamsReleasesApi $PreReleases))
     }
 }
 
@@ -523,7 +563,7 @@ function Open-TeamsSettings {
     }
     $State.SettingsOpen = $true
     try {
-        $Result = Show-TeamsSettingsDialog -Settings $Config -Autostart (Get-TeamsAutostart) -Diagnostics { Get-TeamsDiagnostics } -CheckUpdates { Invoke-TeamsUpdateCheckNow }
+        $Result = Show-TeamsSettingsDialog -Settings $Config -Autostart (Get-TeamsAutostart) -Diagnostics { Get-TeamsDiagnostics } -CheckUpdates { param([bool]$PreReleases) Invoke-TeamsUpdateCheckNow -PreReleases $PreReleases }
         if ($Result) {
             Save-TeamsSettings $Result.Settings
             Set-TeamsAutostart $Result.Autostart
@@ -710,6 +750,7 @@ function Get-TeamsDiagnostics {
         "Teams Busy Light $AppVersion (Windows tray app)"
         "Windows:          $Os, PowerShell $($PSVersionTable.PSVersion), $([CultureInfo]::CurrentUICulture.Name)"
         "Signature pin:    $(if ($SigningCertificateSha256) { 'set (in-app updates)' } else { 'none' })"
+        "Update channel:   $(if ($Config.PreReleases) { 'with pre-releases' } else { 'releases' })"
         "Update available: $(if ($State.UpdateVersion) { $State.UpdateVersion } else { 'no' })"
         ''
         "Teams running:    $(& $YesNo $Teams)$(if ($Teams) { ', version ' + $Teams.FileVersion })"
