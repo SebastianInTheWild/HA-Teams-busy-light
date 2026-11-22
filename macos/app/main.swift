@@ -85,7 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         signalSource = source
 
         monitor.start()
-        updateChecker.setEnabled(settings.checkForUpdates)
+        updateChecker.setEnabled(settings.checkForUpdates, preReleases: settings.preReleases)
         refresh()
         if !settings.isConfigured {
             showSettings()
@@ -240,7 +240,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             updateItem.isEnabled = false
             updateItem.isHidden = false
         } else if let version = updateChecker.availableVersion {
-            updateItem.title = updateChecker.downloadURL != nil ? L.menuInstallUpdate(version) : L.menuUpdate(version)
+            if updateChecker.isDowngrade {
+                updateItem.title = L.menuDowngrade(version)
+            } else {
+                updateItem.title = updateChecker.downloadURL != nil ? L.menuInstallUpdate(version) : L.menuUpdate(version)
+            }
             updateItem.isEnabled = true
             updateItem.isHidden = false
         } else {
@@ -303,7 +307,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 model: model,
                 currentStatus: { [weak self] in (self?.monitor.effectiveStatus, self?.monitor.inCall ?? false) },
                 diagnostics: { [weak self] in self.map { Diagnostics.text(monitor: $0.monitor, settings: $0.settings, updateChecker: $0.updateChecker) } ?? "" },
-                checkForUpdates: { [weak self] completion in self?.checkForUpdates(completion: completion) },
+                checkForUpdates: { [weak self] preReleases, completion in self?.checkForUpdates(preReleases: preReleases, completion: completion) },
                 onSave: { [weak self] settings, autostart in self?.apply(settings, autostart: autostart) },
                 onClose: { [weak self] in self?.settingsWindow?.close() },
                 onGrantAccess: { [weak self] in self?.openAccessSettings() },
@@ -319,6 +323,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
                 self?.settingsWindow = nil
                 self?.settingsModel = nil
+                self?.updateChecker.resyncChannel()
             }
             settingsWindow = window
         }
@@ -337,12 +342,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             }
         }
         let updatesChanged = newSettings.checkForUpdates != settings.checkForUpdates
+            || newSettings.preReleases != settings.preReleases
         newSettings.save()
         settings = newSettings
         Log.write("Settings saved")
         monitor.update(settings: settings)
         if updatesChanged {
-            updateChecker.setEnabled(settings.checkForUpdates)
+            updateChecker.setEnabled(settings.checkForUpdates, preReleases: settings.preReleases)
         }
         refresh()
         settingsWindow?.close()
@@ -437,7 +443,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     @objc private func openReleasePage() {
-        NSWorkspace.shared.open(UpdateChecker.releasesPage)
+        NSWorkspace.shared.open(updateChecker.releasePage)
     }
 
     /// Menu item and notification: install the update (after asking) or
@@ -493,9 +499,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     /// "Check for Updates" (menu and settings): asks GitHub right away, also
     /// when the daily check is off
-    private func checkForUpdates(completion: @escaping (UpdateChecker.CheckResult) -> Void) {
+    private func checkForUpdates(preReleases: Bool? = nil, completion: @escaping (UpdateChecker.CheckResult) -> Void) {
         checkingManually = true
-        updateChecker.check { [weak self] result in
+        updateChecker.check(preReleases: preReleases) { [weak self] result in
             self?.checkingManually = false
             completion(result)
         }
@@ -506,7 +512,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         checkForUpdates { [weak self] result in
             guard let self else { return }
             switch result {
-            case .available:
+            case .available, .downgrade:
                 // Asks whether to install it, or opens the release page
                 self.updateClicked()
             case .upToDate(let version):
@@ -532,7 +538,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private func updateChanged() {
         refresh()
         let key = "notifiedVersion"
-        guard !checkingManually,
+        // No notification for going back: the user switched the channel
+        guard !checkingManually, !updateChecker.isDowngrade,
               let version = updateChecker.availableVersion,
               UserDefaults.standard.string(forKey: key) != version
         else { return }

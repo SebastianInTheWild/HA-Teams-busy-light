@@ -206,11 +206,17 @@ def _is_older(version: str, than: str) -> bool:
     """Compare two versions; unparsable versions are never reported as older.
 
     0.0.0 is a build without a version (e.g. run from a clone of the repository).
+    Only the release part counts: the app of a pre-release reports e.g.
+    1.7.0-beta.3, while its integration reports 1.7.0.
     """
     if version == "0.0.0":
         return False
+
+    def release(value: str) -> AwesomeVersion:
+        return AwesomeVersion(value.split("-", 1)[0].split("+", 1)[0])
+
     try:
-        return AwesomeVersion(version) < AwesomeVersion(than)
+        return release(version) < release(than)
     except Exception:  # noqa: BLE001 - any odd version string from the app
         return False
 
@@ -238,8 +244,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: TeamsStatusConfigEntry) 
         try:
             payload = WEBHOOK_SCHEMA(await request.json())
         except (ValueError, vol.Invalid) as err:
+            # The details only in the log, not in the answer to the caller
             _LOGGER.warning("Invalid message from Teams Busy Light: %s", err)
-            return web.Response(status=HTTPStatus.BAD_REQUEST, text=str(err))
+            return web.Response(status=HTTPStatus.BAD_REQUEST, text="Invalid message")
         data.async_update(payload)
         return web.Response(status=HTTPStatus.OK)
 

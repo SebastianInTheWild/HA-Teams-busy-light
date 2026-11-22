@@ -1,60 +1,182 @@
 name: Release
 
+# Every push is validated and then published, in two channels:
+#   main            -> release      v<version>           once per version
+#   other branches  -> pre-release  v<version>-beta.<n>  only while <version>
+#                                                        is newer than the
+#                                                        latest release
+# <version> is the version in manifest.json; bump it in the branch to start
+# pre-releases of the next version, and merge it into main to release it.
+#
+# The release is created as a draft and published only once both app
+# downloads are attached, so the apps never see a release without them.
+# The apps offer releases; with the update channel "Beta" also pre-releases.
+
 on:
   push:
-    tags:
-      - "v*.*.*"
+    branches: ["**"]
+    paths-ignore:
+      - "**.md"
+      - "LICENSE"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/workflows/codeql.yml"
+  # Retry the release of the current version (e.g. after a failed build)
+  workflow_dispatch:
+
+# One run per branch at a time; pre-release numbers are taken from the tags
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
-  release:
-    name: Create GitHub release
+  validate:
+    name: Validate
+    uses: ./.github/workflows/validate.yml
+
+  version:
+    name: Determine version
+    needs: validate
     runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.version.outputs.publish }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v5
 
-      - name: Check manifest version matches tag
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          manifest=$(jq -r .version custom_components/teams_status/manifest.json)
-          if [ "$manifest" != "$version" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match manifest.json version $manifest"
-            exit 1
-          fi
-
-      - name: Extract release notes from CHANGELOG.md
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          # Lines between "## <version>" and the next "## " heading
-          tr -d '\r' < CHANGELOG.md \
-            | awk -v v="$version" '$0 == "## " v {f=1; next} /^## /{f=0} f' \
-            > notes.md
-          if ! grep -q '[^[:space:]]' notes.md; then
-            echo "::error::No section '## $version' found in CHANGELOG.md"
-            exit 1
-          fi
-          cat notes.md
-
-      - name: Create or update release
+      - id: version
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            gh release edit "$GITHUB_REF_NAME" --title "$version" --notes-file notes.md
+          set -euo pipefail
+          base=$(jq -r .version custom_components/teams_status/manifest.json)
+          if ! [[ "$base" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::manifest.json version '$base' is not of the form 1.2.3"
+            exit 1
+          fi
+          # Latest release (GitHub leaves out drafts and pre-releases)
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null || echo v0.0.0)
+          latest=${latest#v}
+          newer=false
+          if [ "$base" != "$latest" ] && [ "$(printf '%s\n' "$latest" "$base" | sort -V | tail -n 1)" = "$base" ]; then
+            newer=true
+          fi
+
+          publish=false
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            prerelease=false
+            version=$base
+            state=$(gh release view "v$version" --json isDraft --jq 'if .isDraft then "draft" else "published" end' 2>/dev/null || echo none)
+            if [ "$state" = published ]; then
+              echo "::notice::v$version is already released; bump the version in manifest.json for a new release"
+            elif [ "$state" = none ] && [ "$newer" != true ]; then
+              echo "::warning::manifest.json version $base is not newer than the latest release $latest"
+            else
+              publish=true
+            fi
           else
-            gh release create "$GITHUB_REF_NAME" --title "$version" --notes-file notes.md --verify-tag
+            prerelease=true
+            if [ "$newer" != true ]; then
+              echo "::notice::No pre-release: manifest.json version $base is not newer than the latest release $latest. Bump it to test the next version."
+              version=$base
+            else
+              # Next number after the existing v<base>-beta.<n> tags
+              last=$(git ls-remote --tags origin | awk -v prefix="refs/tags/v$base-beta." '
+                index($2, prefix) == 1 { n = substr($2, length(prefix) + 1); if (n ~ /^[0-9]+$/ && n + 0 > max) max = n + 0 }
+                END { print max + 0 }')
+              version="$base-beta.$((last + 1))"
+              publish=true
+            fi
+          fi
+          {
+            echo "publish=$publish"
+            echo "version=$version"
+            echo "tag=v$version"
+            echo "prerelease=$prerelease"
+          } >> "$GITHUB_OUTPUT"
+          echo "Channel: $([ "$prerelease" = true ] && echo pre-release || echo release), version $version, publish: $publish (latest release $latest)"
+
+  draft:
+    name: Create draft release
+    needs: version
+    if: needs.version.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      TAG: ${{ needs.version.outputs.tag }}
+      PRERELEASE: ${{ needs.version.outputs.prerelease }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Create tag
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
+            echo "$TAG exists already (run repeated)"
+            exit 0
+          fi
+          # On the pushed commit itself: GitHub does not let the workflow push
+          # commits of its own here (workflow files). The apps get the
+          # pre-release version when they are built; the integration keeps
+          # the version of manifest.json and compares only that part.
+          git tag "$TAG" "$GITHUB_SHA"
+          git push origin "$TAG"
+
+      - name: Release notes
+        run: |
+          set -euo pipefail
+          # Lines between "## <heading>" and the next "## " heading
+          section() {
+            tr -d '\r' < CHANGELOG.md | awk -v h="## $1" '$0 == h {f=1; next} /^## /{f=0} f'
+          }
+          if [ "$PRERELEASE" = true ]; then
+            base=${VERSION%%-*}
+            {
+              echo "Pre-release for testing, from the branch \`$GITHUB_REF_NAME\` ($GITHUB_SHA)."
+              echo "The apps offer it with the update channel \"Beta (pre-releases)\"; HACS with \"Show beta versions\"."
+              echo
+              section "$base"
+              section Unreleased
+            } > notes.md
+          else
+            section "$VERSION" > notes.md
+            if ! grep -q '[^[:space:]]' notes.md; then
+              echo "::error::No section '## $VERSION' found in CHANGELOG.md"
+              exit 1
+            fi
+          fi
+          cat notes.md
+
+      - name: Create or update draft
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release edit "$TAG" --title "$VERSION" --notes-file notes.md
+          else
+            flags=(--draft --verify-tag)
+            if [ "$PRERELEASE" = true ]; then
+              flags+=(--prerelease)
+            fi
+            gh release create "$TAG" --title "$VERSION" --notes-file notes.md "${flags[@]}"
           fi
 
   windows:
     name: Attach Windows download
-    needs: release
+    needs: [version, draft]
     runs-on: windows-latest
     environment: release
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      TAG: ${{ needs.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.version.outputs.tag }}
 
       - name: Build and sign
         # Windows PowerShell 5.1, like on the users' PCs
@@ -68,23 +190,27 @@ jobs:
             Write-Output "::error::WINDOWS_SIGNING_PFX is not set (environment release)"
             exit 1
           }
-          ./windows/tools/build-release.ps1 -Version $env:GITHUB_REF_NAME -OutputPath dist
+          ./windows/tools/build-release.ps1 -Version $env:VERSION -OutputPath dist
 
       - name: Upload to the release
-        # bash: the default shell on Windows is PowerShell, where
-        # $GITHUB_REF_NAME is not the environment variable
+        # bash: the default shell on Windows is PowerShell
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" dist/TeamsBusyLight-Windows.zip --clobber
+        run: gh release upload "$TAG" dist/TeamsBusyLight-Windows.zip --clobber
 
-  assets:
+  macos:
     name: Attach macOS download
-    needs: release
+    needs: [version, draft]
     runs-on: macos-latest
     environment: release
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      TAG: ${{ needs.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.version.outputs.tag }}
 
       - name: Build macOS app
         env:
@@ -96,7 +222,7 @@ jobs:
             echo "::error::MACOS_SIGNING_P12 is not set (environment release)"
             exit 1
           fi
-          bash macos/build.sh
+          BUILD_VERSION="$VERSION" bash macos/build.sh
 
       - name: Create ZIP file
         run: |
@@ -109,4 +235,30 @@ jobs:
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" dist/TeamsBusyLight-macOS.zip --clobber
+        run: gh release upload "$TAG" dist/TeamsBusyLight-macOS.zip --clobber
+
+  publish:
+    name: Publish
+    needs: [version, windows, macos]
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ needs.version.outputs.tag }}
+      PRERELEASE: ${{ needs.version.outputs.prerelease }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check downloads and publish
+        run: |
+          set -euo pipefail
+          assets=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '[.assets[].name] | join(" ")')
+          for name in TeamsBusyLight-Windows.zip TeamsBusyLight-macOS.zip; do
+            if [[ " $assets " != *" $name "* ]]; then
+              echo "::error::$name is missing in $TAG"
+              exit 1
+            fi
+          done
+          if [ "$PRERELEASE" = true ]; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false
+          else
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          fi
+          echo "Published $TAG"

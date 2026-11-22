@@ -10,6 +10,7 @@ final class SettingsModel: ObservableObject {
     @Published var pollSeconds: Int
     @Published var autostart: Bool
     @Published var checkForUpdates: Bool
+    @Published var preReleases: Bool
     @Published var homeNetworks: String
     @Published var askForNewNetworks: Bool
     @Published var detectOtherCalls: Bool
@@ -30,6 +31,7 @@ final class SettingsModel: ObservableObject {
         pollSeconds = settings.pollSeconds
         self.autostart = autostart
         checkForUpdates = settings.checkForUpdates
+        preReleases = settings.preReleases
         homeNetworks = settings.homeNetworks
         askForNewNetworks = settings.askForNewNetworks
         detectOtherCalls = settings.detectOtherCalls
@@ -49,8 +51,9 @@ struct SettingsView: View {
     let currentStatus: () -> (status: String?, inCall: Bool)
     /// Text for "Copy Diagnostics"
     let diagnostics: () -> String
-    /// "Check for Updates": answers on the main thread
-    let checkForUpdates: (@escaping (UpdateChecker.CheckResult) -> Void) -> Void
+    /// "Check for Updates" with the channel as chosen in the window (true =
+    /// with pre-releases): answers on the main thread
+    let checkForUpdates: (Bool, @escaping (UpdateChecker.CheckResult) -> Void) -> Void
     let onSave: (AppSettings, Bool) -> Void
     let onClose: () -> Void
     let onGrantAccess: () -> Void
@@ -107,6 +110,13 @@ struct SettingsView: View {
                     Section {
                         Toggle(L.autostart, isOn: $model.autostart)
                         Toggle(L.checkForUpdates, isOn: $model.checkForUpdates)
+                        Picker(L.updateChannel, selection: $model.preReleases) {
+                            Text(L.updateChannelRelease).tag(false)
+                            Text(L.updateChannelBeta).tag(true)
+                        }
+                        .pickerStyle(.menu)
+                        // A result of "Check for Updates" belongs to the channel it was made with
+                        .onChange(of: model.preReleases) { _ in model.updateCheckResult = nil }
                         HStack {
                             Button(L.checkForUpdatesNow, action: checkUpdates)
                                 .disabled(model.checkingUpdates)
@@ -119,6 +129,8 @@ struct SettingsView: View {
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                         }
+                    } footer: {
+                        hint(L.updateChannelHint)
                     }
                 }
                 .tabItem { Text(L.tabGeneral) }
@@ -231,13 +243,15 @@ struct SettingsView: View {
     private func checkUpdates() {
         model.checkingUpdates = true
         model.updateCheckResult = nil
-        checkForUpdates { result in
+        checkForUpdates(model.preReleases) { result in
             model.checkingUpdates = false
             switch result {
             case .upToDate(let version):
                 model.updateCheckResult = (L.updateCheckLatest(version), true)
             case .available(let version):
                 model.updateCheckResult = (L.updateCheckAvailable(version), true)
+            case .downgrade(let version):
+                model.updateCheckResult = (L.updateCheckDowngrade(version), true)
             case .failed(let reason):
                 model.updateCheckResult = (L.updateCheckFailed(reason), false)
             }
@@ -279,6 +293,7 @@ struct SettingsView: View {
         settings.heartbeatSeconds = model.heartbeatSeconds
         settings.pollSeconds = model.pollSeconds
         settings.checkForUpdates = model.checkForUpdates
+        settings.preReleases = model.preReleases
         settings.homeNetworks = networks
         settings.askForNewNetworks = model.askForNewNetworks
         settings.detectOtherCalls = model.detectOtherCalls

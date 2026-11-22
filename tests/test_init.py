@@ -119,6 +119,12 @@ async def test_outdated_app_issue(hass: HomeAssistant, entry, hass_client_no_aut
     await hass.async_block_till_done()
     assert issues.async_get_issue(DOMAIN, issue_id) is None
 
+    # The app of a pre-release (1.7.0-beta.3 with integration 1.7.0) is not older
+    beta = f"{await _integration_version(hass)}-beta.3"
+    assert await _post(hass_client_no_auth, {"app_version": beta}) == 200
+    await hass.async_block_till_done()
+    assert issues.async_get_issue(DOMAIN, issue_id) is None
+
     # Nonsense versions never raise the issue
     assert await _post(hass_client_no_auth, {"app_version": "dev-build"}) == 200
     await hass.async_block_till_done()

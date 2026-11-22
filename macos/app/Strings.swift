@@ -77,6 +77,13 @@ enum L {
     static func menuInstallUpdate(_ version: String) -> String {
         t("Install Version \(version)…", "Version \(version) installieren …")
     }
+    static func menuDowngrade(_ version: String) -> String {
+        t("Switch to Release \(version)…", "Zu Release \(version) wechseln …")
+    }
+    static func updateCheckDowngrade(_ version: String) -> String {
+        t("Release \(version) replaces the beta – install it from the menu.",
+          "Release \(version) ersetzt die Beta – über das Menü installieren.")
+    }
     static func menuInstallingUpdate(_ version: String) -> String {
         t("Installing Version \(version)…", "Version \(version) wird installiert …")
     }
@@ -102,6 +109,13 @@ enum L {
     static let checkForUpdates = t("Check for updates daily", "Täglich nach Updates suchen")
     static let menuCheckForUpdates = t("Check for Updates…", "Nach Updates suchen …")
     static let checkForUpdatesNow = t("Check for Updates", "Nach Updates suchen")
+    static let updateChannel = t("Update channel", "Update-Kanal")
+    static let updateChannelRelease = t("Release", "Release")
+    static let updateChannelBeta = t("Beta (pre-releases)", "Beta (Vorabversionen)")
+    static let updateChannelHint = t(
+        "Beta is for testing: it also offers pre-releases, which come before a release and can still contain errors.",
+        "Beta ist zum Testen: Es werden auch Vorabversionen angeboten, die vor einem Release kommen und noch Fehler enthalten können."
+    )
     static func updateCheckLatest(_ version: String) -> String {
         t("You have the latest version (\(version)).", "Du hast die neueste Version (\(version)).")
     }
