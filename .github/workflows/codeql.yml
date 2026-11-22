@@ -1,0 +1,62 @@
+name: CodeQL
+
+# Static security analysis of the code: dangerous patterns such as commands
+# built from outside input, unsafe downloads, code run at runtime or attackable
+# workflows. Results are listed under Security > Code scanning. PowerShell is
+# not supported by CodeQL; PSScriptAnalyzer checks it in validate.yml.
+
+on:
+  push:
+    branches: ["**"]
+    paths-ignore:
+      - "**.md"
+      - "LICENSE"
+  pull_request:
+  schedule:
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ${{ matrix.language == 'swift' && 'macos-latest' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The integration
+          - language: python
+            build-mode: none
+          # The Windows launcher (compiled by the installer)
+          - language: csharp
+            build-mode: none
+          # The macOS app; CodeQL watches the build
+          - language: swift
+            build-mode: manual
+          # The workflows themselves (e.g. injection through branch names)
+          - language: actions
+            build-mode: none
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended
+
+      - name: Build the macOS app
+        if: matrix.build-mode == 'manual'
+        # Signed ad hoc: only the code matters here
+        run: bash macos/build.sh
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}

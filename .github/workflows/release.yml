@@ -19,6 +19,7 @@ on:
       - "**.md"
       - "LICENSE"
       - ".github/ISSUE_TEMPLATE/**"
+      - ".github/workflows/codeql.yml"
   # Retry the release of the current version (e.g. after a failed build)
   workflow_dispatch:
 
