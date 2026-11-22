@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.6.0
 
 * Integration: every change of the status or the call activity fires the event `teams_status_changed` with the device ID
 * Blueprint: select only the Teams device instead of the status and activity sensors ("Run actions" applies the current status); needs this integration version. Existing automations from the blueprint must select the device once after re-importing
