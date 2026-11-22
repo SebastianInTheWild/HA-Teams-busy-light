@@ -5,9 +5,10 @@ name: CodeQL
 # workflows. Results are listed under Security > Code scanning. PowerShell is
 # not supported by CodeQL; PSScriptAnalyzer checks it in validate.yml.
 
+# Branches are analyzed through their pull request, main on every push
 on:
   push:
-    branches: ["**"]
+    branches: [main]
     paths-ignore:
       - "**.md"
       - "LICENSE"
@@ -18,6 +19,12 @@ on:
 
 permissions:
   contents: read
+
+# A newer commit replaces the analysis of an older one (the Swift analysis
+# needs a macOS runner for about 10 minutes)
+concurrency:
+  group: codeql-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   analyze:

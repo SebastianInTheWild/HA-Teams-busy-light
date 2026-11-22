@@ -9,19 +9,24 @@ on:
     - cron: "0 4 * * 1"
   workflow_dispatch:
 
+# Only reading; no job needs more
+permissions:
+  contents: read
+
 jobs:
   hassfest:
     name: Hassfest
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: home-assistant/actions/hassfest@master
+      # Pinned to a commit: a moved branch must not change what runs here
+      - uses: home-assistant/actions/hassfest@07f46fd2e19967768b5fd3000f91f857452b767c # master, 2026-11-19
 
   hacs:
     name: HACS
     runs-on: ubuntu-latest
     steps:
-      - uses: hacs/action@main
+      - uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa # main, 2026-06-08
         with:
           category: integration
           # Brand images ship locally in custom_components/teams_status/brand

@@ -244,8 +244,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: TeamsStatusConfigEntry) 
         try:
             payload = WEBHOOK_SCHEMA(await request.json())
         except (ValueError, vol.Invalid) as err:
+            # The details only in the log, not in the answer to the caller
             _LOGGER.warning("Invalid message from Teams Busy Light: %s", err)
-            return web.Response(status=HTTPStatus.BAD_REQUEST, text=str(err))
+            return web.Response(status=HTTPStatus.BAD_REQUEST, text="Invalid message")
         data.async_update(payload)
         return web.Response(status=HTTPStatus.OK)
 
