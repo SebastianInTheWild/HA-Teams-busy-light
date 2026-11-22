@@ -91,12 +91,18 @@ call starts.
 
 [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FSebastianInTheWild%2FHA-Teams-busy-light%2Fmain%2Fblueprints%2Fautomation%2Fteams_status%2Fteams_busy_light.yaml)
 
-Import the blueprint, then create an automation from it. Lights are required; optionally,
+Import the blueprint, then create an automation from it. Select the Teams device (e.g.
+`Teams Anna`) and the lights; the blueprint uses the status and call activity of that
+device automatically (**Run actions** applies its current status). Optionally,
 enable **Optional music or radio** and select a media player, media content ID (a media
 source ID or URL) and media type. Playback starts whenever Teams is not in a call or
 offline, stops during calls or while offline, and resumes when the call ends or Teams
-comes back online. The speaker itself is left on when playback stops. Colors, brightness
-and the Teams sensors can be changed in the collapsed sections.
+comes back online. The speaker itself is left on when playback stops. Colors and brightness
+can be changed in the collapsed section.
+
+The blueprint needs integration 1.6.0 or newer. Automations created from an older version
+of the blueprint show an error after re-importing it: open them once and select the Teams
+device.
 
 Or import it manually under **Settings → Automations & scenes → Blueprints → Import blueprint**
 with this URL:
@@ -153,6 +159,19 @@ actions:
 If a computer stops reporting (shut down, asleep), the integration sets the status to
 `offline` and camera and microphone to off after the timeout (default 180 s, change it under
 **Configure**).
+
+Every change of the status or the call activity is also fired as the event
+`teams_status_changed` with `device_id`, `entry_id`, `status`, `activity` and `source`
+(the blueprint triggers on it). The first message after a Home Assistant restart always
+fires it, so automations catch up:
+
+```yaml
+triggers:
+  - trigger: event
+    event_type: teams_status_changed
+    event_data:
+      device_id: 0123456789abcdef0123456789abcdef  # the Teams device
+```
 
 When an app reports a version older than the integration, Home Assistant shows a repair
 issue under **Settings → Repairs** until the updated app reports. The device page shows the

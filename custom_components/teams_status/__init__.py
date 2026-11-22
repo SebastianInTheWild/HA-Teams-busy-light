@@ -4,6 +4,8 @@ Receives the Teams status from the Teams Busy Light app on Windows (tray app)
 or macOS (menu bar app) via a webhook and provides it as sensors. Newer apps
 also report whether the camera or microphone is in use (by any app) and their
 own version; an app older than the integration raises a repair issue.
+Changes of the status or the call activity are also fired as the event
+teams_status_changed with the device ID, so the blueprint needs only the device.
 """
 
 from __future__ import annotations
@@ -34,6 +36,7 @@ from .const import (
     CONF_TIMEOUT,
     DEFAULT_TIMEOUT,
     DOMAIN,
+    EVENT_STATUS_CHANGED,
     PLATFORM_OPTIONS,
     SOURCE_OPTIONS,
     SOURCE_TEAMS,
@@ -89,6 +92,7 @@ class TeamsStatusData:
         self.platform: str | None = None
         self.last_seen: datetime | None = None
         self._cancel_timeout: Callable[[], None] | None = None
+        self._fired: tuple[str | None, str | None] | None = None
 
     @callback
     def async_update(self, data: dict[str, Any]) -> None:
@@ -112,7 +116,33 @@ class TeamsStatusData:
             self._async_app_version_changed()
         self.last_seen = dt_util.utcnow()
         self.async_schedule_timeout()
+        self._async_notify()
+
+    @callback
+    def _async_notify(self) -> None:
+        """Update the entities and fire an event when status or activity changed.
+
+        The first message after a restart always fires, so automations resync.
+        """
         async_dispatcher_send(self.hass, signal_update(self.entry_id))
+        current = (self.status, self.activity)
+        if current == self._fired:
+            return
+        self._fired = current
+        # The entry has exactly one device (identifier (DOMAIN, entry_id))
+        devices = dr.async_entries_for_config_entry(
+            dr.async_get(self.hass), self.entry_id
+        )
+        self.hass.bus.async_fire(
+            EVENT_STATUS_CHANGED,
+            {
+                "device_id": devices[0].id if devices else None,
+                "entry_id": self.entry_id,
+                "status": self.status,
+                "activity": self.activity,
+                "source": self.source,
+            },
+        )
 
     @callback
     def _async_app_version_changed(self) -> None:
@@ -162,7 +192,7 @@ class TeamsStatusData:
             self.camera = False
         if self.microphone is not None:
             self.microphone = False
-        async_dispatcher_send(self.hass, signal_update(self.entry_id))
+        self._async_notify()
 
     @callback
     def async_shutdown(self) -> None:

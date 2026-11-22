@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+* Integration: every change of the status or the call activity fires the event `teams_status_changed` with the device ID
+* Blueprint: select only the Teams device instead of the status and activity sensors ("Run actions" applies the current status); needs this integration version. Existing automations from the blueprint must select the device once after re-importing
+
 ## 1.5.1
 
 * macOS and Windows: "Check for updates" in the menu and in the settings (General): asks right away, also when the daily check is off, and says whether a newer version is available; from the menu it offers to install it

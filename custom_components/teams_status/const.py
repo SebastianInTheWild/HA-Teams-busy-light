@@ -29,6 +29,9 @@ ACTIVITY_OPTIONS = [
 ]
 
 
+# Fired on the event bus when the status or the call activity changes
+EVENT_STATUS_CHANGED = f"{DOMAIN}_changed"
+
 SOURCE_TEAMS = "teams"
 SOURCE_MANUAL = "manual"
 SOURCE_OPTIONS = [SOURCE_TEAMS, SOURCE_MANUAL]

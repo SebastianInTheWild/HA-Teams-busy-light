@@ -5,18 +5,26 @@ blueprint:
     lights: Available = green, Busy/In a meeting/In a call = red,
     Do not disturb/Presenting/Focusing = red (custom color possible),
     Away/Be right back = orange, Offline = off.
-    When setting up the integration, "Teams" is added in front of the
-    entered name automatically. Optionally, music or radio can be played on
-    a media player whenever Teams is not in a call or offline.
+    Select the Teams device (one per computer, named "Teams ..." after the
+    name entered when setting up the integration); its status and call
+    activity are used automatically. Optionally, music or radio can be played
+    on a media player whenever Teams is not in a call or offline.
+    Requires Teams Busy Light integration 1.6.0 or newer.
   domain: automation
   source_url: https://github.com/SebastianInTheWild/HA-Teams-busy-light/blob/main/blueprints/automation/teams_status/teams_busy_light.yaml
   homeassistant:
     min_version: "2024.10.0"
   input:
     lights:
-      name: Lights
+      name: Teams and lights
       icon: mdi:lightbulb-group
       input:
+        teams_device:
+          name: Teams device
+          description: The Teams device whose status the lights show.
+          selector:
+            device:
+              integration: teams_status
         target_lights:
           name: Lights
           description: Lights that show the Teams status.
@@ -24,23 +32,6 @@ blueprint:
             target:
               entity:
                 domain: light
-    teams:
-      name: Teams sensors
-      icon: mdi:microsoft-teams
-      collapsed: true
-      input:
-        status_sensor:
-          name: Status sensor
-          selector:
-            entity:
-              integration: teams_status
-              domain: sensor
-        activity_sensor:
-          name: Activity sensor
-          selector:
-            entity:
-              integration: teams_status
-              domain: sensor
     appearance:
       name: Colors and brightness
       icon: mdi:palette
@@ -111,43 +102,46 @@ blueprint:
 mode: restart
 max_exceeded: silent
 
+# The integration fires this event whenever the status or call activity changes
 triggers:
-  - trigger: state
-    entity_id: !input status_sensor
-    to:
-      - available
-      - busy
-      - in_a_call
-      - in_a_meeting
-      - presenting
-      - focusing
-      - do_not_disturb
-      - be_right_back
-      - away
-      - offline
-  - trigger: state
-    entity_id: !input activity_sensor
-    to:
-      - not_in_call
-      - in_call
-      - incoming_call
-      - outgoing_call
+  - trigger: event
+    event_type: teams_status_changed
+    event_data:
+      device_id: !input teams_device
+
+variables:
+  teams_device: !input teams_device
+  # Without the event ("Run actions"), the current states of the device's
+  # sensors are used
+  sensor_states: >-
+    {{ device_entities(teams_device) | select('match', 'sensor\.')
+       | map('states') | list }}
+  status: >-
+    {% if trigger.platform == 'event' %}{{ trigger.event.data.status }}
+    {%- else %}{{ sensor_states | select('in', ['available', 'busy',
+       'in_a_call', 'in_a_meeting', 'presenting', 'focusing',
+       'do_not_disturb', 'be_right_back', 'away', 'offline'])
+       | first | default(none) }}{% endif %}
+  activity: >-
+    {% if trigger.platform == 'event' %}{{ trigger.event.data.activity }}
+    {%- else %}{{ sensor_states | select('in', ['not_in_call', 'in_call',
+       'incoming_call', 'outgoing_call']) | first | default(none) }}{% endif %}
+  in_call: >-
+    {{ status == 'in_a_call' or
+       activity in ['in_call', 'incoming_call', 'outgoing_call'] }}
+  audio_enabled: !input enable_audio
+  speaker_entity: !input speaker
+  media_content_id: !input media_content_id
 
 actions:
   - choose:
       - alias: Offline
-        conditions:
-          - condition: state
-            entity_id: !input status_sensor
-            state: offline
+        conditions: "{{ status == 'offline' }}"
         sequence:
           - action: light.turn_off
             target: !input target_lights
       - alias: Do not disturb, Presenting, Focusing
-        conditions:
-          - condition: state
-            entity_id: !input status_sensor
-            state: [do_not_disturb, presenting, focusing]
+        conditions: "{{ status in ['do_not_disturb', 'presenting', 'focusing'] }}"
         sequence:
           - action: light.turn_on
             target: !input target_lights
@@ -155,15 +149,7 @@ actions:
               rgb_color: !input color_do_not_disturb
               brightness_pct: !input brightness
       - alias: Busy or in a call
-        conditions:
-          - condition: or
-            conditions:
-              - condition: state
-                entity_id: !input status_sensor
-                state: [busy, in_a_call, in_a_meeting]
-              - condition: state
-                entity_id: !input activity_sensor
-                state: [in_call, incoming_call, outgoing_call]
+        conditions: "{{ in_call or status in ['busy', 'in_a_meeting'] }}"
         sequence:
           - action: light.turn_on
             target: !input target_lights
@@ -171,10 +157,7 @@ actions:
               rgb_color: !input color_busy
               brightness_pct: !input brightness
       - alias: Away
-        conditions:
-          - condition: state
-            entity_id: !input status_sensor
-            state: [away, be_right_back]
+        conditions: "{{ status in ['away', 'be_right_back'] }}"
         sequence:
           - action: light.turn_on
             target: !input target_lights
@@ -182,58 +165,35 @@ actions:
               rgb_color: !input color_away
               brightness_pct: !input brightness
       - alias: Available
-        conditions:
-          - condition: state
-            entity_id: !input status_sensor
-            state: available
+        conditions: "{{ status == 'available' }}"
         sequence:
           - action: light.turn_on
             target: !input target_lights
             data:
               rgb_color: !input color_available
               brightness_pct: !input brightness
-  - variables:
-      audio_enabled: !input enable_audio
-      speaker_entity: !input speaker
-      media_content_id: !input media_content_id
-      status_entity: !input status_sensor
-      activity_entity: !input activity_sensor
   - choose:
       - alias: Stop music during calls or offline
         conditions:
-          - condition: template
-            value_template: >-
-              {{ audio_enabled and (speaker_entity | length > 0) }}
-          - condition: or
-            conditions:
-              - condition: state
-                entity_id: !input status_sensor
-                state: [in_a_call, offline]
-              - condition: state
-                entity_id: !input activity_sensor
-                state: [in_call, incoming_call, outgoing_call]
+          - "{{ audio_enabled and (speaker_entity | length > 0) }}"
+          - "{{ in_call or status == 'offline' }}"
         sequence:
           - action: media_player.media_stop
             target:
-              entity_id: !input speaker
+              # From the variable: an empty input would fail validation
+              entity_id: "{{ speaker_entity }}"
       - alias: Play music outside calls and offline
         conditions:
-          - condition: template
-            value_template: >-
-              {{ audio_enabled and (speaker_entity | length > 0) and
-                 (media_content_id | length > 0) }}
-          - condition: template
-            value_template: "{{ states(speaker_entity) != 'playing' }}"
-          - condition: template
-            value_template: >-
-              {{ not is_state(status_entity, 'in_a_call') and
-                 not is_state(status_entity, 'offline') and
-                 states(activity_entity) not in
-                 ['in_call', 'incoming_call', 'outgoing_call'] }}
+          - >-
+            {{ audio_enabled and (speaker_entity | length > 0) and
+               (media_content_id | length > 0) }}
+          - "{{ not in_call and status != 'offline' }}"
+          - "{{ states(speaker_entity) != 'playing' }}"
         sequence:
           - action: media_player.play_media
             target:
-              entity_id: !input speaker
+              # From the variable: an empty input would fail validation
+              entity_id: "{{ speaker_entity }}"
             data:
               media_content_id: !input media_content_id
               media_content_type: !input media_content_type

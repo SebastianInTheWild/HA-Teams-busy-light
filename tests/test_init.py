@@ -7,6 +7,7 @@ from datetime import timedelta
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
+    async_capture_events,
     async_fire_time_changed,
 )
 
@@ -16,7 +17,11 @@ from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
 
-from custom_components.teams_status.const import DOMAIN, issue_id_outdated_app
+from custom_components.teams_status.const import (
+    DOMAIN,
+    EVENT_STATUS_CHANGED,
+    issue_id_outdated_app,
+)
 
 WEBHOOK_ID = "test_webhook"
 
@@ -142,3 +147,35 @@ async def test_timeout(hass: HomeAssistant, entry, hass_client_no_auth) -> None:
     assert hass.states.get("sensor.teams_status").state == "offline"
     assert hass.states.get("binary_sensor.teams_camera").state == "off"
     assert hass.states.get("binary_sensor.teams_microphone").state == "off"
+
+
+async def test_status_changed_event(hass: HomeAssistant, entry, hass_client_no_auth) -> None:
+    """Status and activity changes fire an event with the device ID, others do not."""
+    events = async_capture_events(hass, EVENT_STATUS_CHANGED)
+    (device,) = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
+
+    assert await _post(hass_client_no_auth, {"status": "busy", "activity": "in_call"}) == 200
+    assert await _post(hass_client_no_auth, {"status": "busy", "camera": True}) == 200
+    assert await _post(hass_client_no_auth, {"activity": "not_in_call"}) == 200
+    await hass.async_block_till_done()
+    assert [e.data for e in events] == [
+        {
+            "device_id": device.id,
+            "entry_id": entry.entry_id,
+            "status": "busy",
+            "activity": "in_call",
+            "source": "teams",
+        },
+        {
+            "device_id": device.id,
+            "entry_id": entry.entry_id,
+            "status": "busy",
+            "activity": "not_in_call",
+            "source": "teams",
+        },
+    ]
+
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=181))
+    await hass.async_block_till_done()
+    assert events[-1].data["status"] == "offline"
+    assert len(events) == 3
