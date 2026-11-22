@@ -103,6 +103,8 @@ $State = @{
     AskingNetwork = $false
     PausedUntil = Get-TeamsPause
     UpdateAssetUrl = $null
+    # The offered version is the latest release, replacing an installed pre-release
+    UpdateDowngrade = $false
     # Release page of the offered version
     UpdatePage = $null
     # Channel of the last check ($true = with pre-releases, $null = none yet)
@@ -318,6 +320,10 @@ function Set-TeamsUpdateItem {
         $UpdateItem.Text = $Messages.MenuUpdating -f $State.UpdateVersion
         $UpdateItem.Enabled = $false
     }
+    elseif ($State.UpdateDowngrade) {
+        $UpdateItem.Text = $Messages.MenuDowngrade -f $State.UpdateVersion
+        $UpdateItem.Enabled = $true
+    }
     elseif ($State.UpdateAssetUrl) {
         $UpdateItem.Text = $Messages.MenuInstallUpdate -f $State.UpdateVersion
         $UpdateItem.Enabled = $true
@@ -457,7 +463,8 @@ function Set-TeamsLatestRelease {
     $Version = $null
     $AssetUrl = $null
     $Page = $null
-    if (Test-TeamsNewerVersion $Latest $AppVersion) {
+    $Offer = Get-TeamsUpdateOffer $Latest $AppVersion $PreReleases
+    if ($Offer) {
         $Version = $Latest
         # Install from the app only if the download can be checked
         $Asset = @($Release.assets | Where-Object { $_.name -eq $ReleaseAssetName }) | Select-Object -First 1
@@ -468,14 +475,17 @@ function Set-TeamsLatestRelease {
             $Page = [string]$Release.html_url
         }
     }
-    if ($Version -ne $State.UpdateVersion -or $AssetUrl -ne $State.UpdateAssetUrl) {
+    $Downgrade = $Offer -eq 'downgrade'
+    if ($Version -ne $State.UpdateVersion -or $AssetUrl -ne $State.UpdateAssetUrl -or $Downgrade -ne $State.UpdateDowngrade) {
         $State.UpdateVersion = $Version
         $State.UpdateAssetUrl = $AssetUrl
         $State.UpdatePage = $Page
+        $State.UpdateDowngrade = $Downgrade
         Set-TeamsUpdateItem
         if ($Version) {
-            Write-TeamsLog "Update available: $Version$(if ($AssetUrl) { ' (can be installed from the app)' })"
-            if (-not $Quiet) {
+            Write-TeamsLog "$(if ($Downgrade) { 'Back to the release' } else { 'Update available' }): $Version$(if ($AssetUrl) { ' (can be installed from the app)' })"
+            # No notification for going back: the user switched the channel
+            if (-not $Quiet -and -not $Downgrade) {
                 $Balloon = if ($AssetUrl) { $Messages.UpdateBalloonInstall } else { $Messages.UpdateBalloon }
                 $Tray.ShowBalloonTip(10000, $Messages.AppName, ($Balloon -f $Version), [System.Windows.Forms.ToolTipIcon]::Info)
             }
@@ -486,15 +496,18 @@ function Set-TeamsLatestRelease {
 
 # "Check for updates" in the menu and the settings: asks GitHub right away
 # (also when the daily check is off) and waits for the answer. The settings
-# window passes the channel as chosen there. Returns @{ Latest; Newer; Error }.
+# window passes the channel as chosen there.
+# Returns @{ Latest; Newer (offered); Downgrade; Error }.
 function Invoke-TeamsUpdateCheckNow {
     param([bool]$PreReleases = [bool]$Config.PreReleases)
 
-    $Result = @{ Latest = $null; Newer = $false; Error = $null }
+    $Result = @{ Latest = $null; Newer = $false; Downgrade = $false; Error = $null }
     try {
         $Json = $UpdateHttp.GetStringAsync((Get-TeamsReleasesApi $PreReleases)).GetAwaiter().GetResult()
         $Result.Latest = Set-TeamsLatestRelease $Json -PreReleases $PreReleases -Quiet
-        $Result.Newer = Test-TeamsNewerVersion $Result.Latest $AppVersion
+        $Offer = Get-TeamsUpdateOffer $Result.Latest $AppVersion $PreReleases
+        $Result.Newer = [bool]$Offer
+        $Result.Downgrade = $Offer -eq 'downgrade'
         $State.LastUpdateCheck = Get-Date
     }
     catch {
@@ -542,6 +555,7 @@ function Invoke-TeamsUpdateCheck {
             $State.UpdatePreReleases = $null
             $State.UpdateVersion = $null
             $State.UpdateAssetUrl = $null
+            $State.UpdateDowngrade = $false
             Set-TeamsUpdateItem
         }
         return

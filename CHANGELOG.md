@@ -3,7 +3,7 @@
 ## Unreleased
 
 * Releases: every merge into `main` publishes a release, every push to another branch a pre-release (`<version>-beta.<n>`) once the version is bumped; a release is published only with both app downloads attached
-* macOS and Windows: "Update channel" in the settings (General): Release or Beta (pre-releases)
+* macOS and Windows: "Update channel" in the settings (General): Release or Beta (pre-releases); back on Release with a pre-release installed, the app offers to switch to the latest release
 * Windows: a download attached to a release after the update check is now picked up on the next check (before, only a restart of the app did)
 
 ## 1.6.0

@@ -730,6 +730,21 @@ function Test-TeamsNewerVersion {
     return (Compare-TeamsVersion $Candidate $Current) -gt 0
 }
 
+# What to offer for the latest version of the channel: 'update' if it is
+# newer, 'downgrade' if a pre-release is installed on the release channel
+# (back to the latest release, even if older), otherwise $null
+function Get-TeamsUpdateOffer {
+    param([string]$Latest, [string]$Current, [bool]$PreReleases)
+
+    if (Test-TeamsNewerVersion $Latest $Current) {
+        return 'update'
+    }
+    if (-not $PreReleases -and $Current.Contains('-') -and (Compare-TeamsVersion $Latest $Current) -ne 0) {
+        return 'downgrade'
+    }
+    return $null
+}
+
 # Picks the newest published release from an answer of the GitHub API: one
 # release (releases/latest) or a list (releases, with pre-releases)
 function Select-TeamsNewestRelease {
@@ -1528,7 +1543,7 @@ function Show-TeamsSettingsDialog {
                 elseif ($Check.Newer) {
                     # Installed from the menu: the app restarts, open settings would be lost
                     $CheckUpdatesResult.ForeColor = [System.Drawing.Color]::FromArgb(45, 80, 145)
-                    $CheckUpdatesResult.Text = $Messages.UpdateCheckAvailable -f $Check.Latest
+                    $CheckUpdatesResult.Text = $(if ($Check.Downgrade) { $Messages.UpdateCheckDowngrade } else { $Messages.UpdateCheckAvailable }) -f $Check.Latest
                 }
                 else {
                     $CheckUpdatesResult.ForeColor = [System.Drawing.Color]::FromArgb(30, 120, 60)

@@ -77,6 +77,13 @@ enum L {
     static func menuInstallUpdate(_ version: String) -> String {
         t("Install Version \(version)…", "Version \(version) installieren …")
     }
+    static func menuDowngrade(_ version: String) -> String {
+        t("Switch to Release \(version)…", "Zu Release \(version) wechseln …")
+    }
+    static func updateCheckDowngrade(_ version: String) -> String {
+        t("Release \(version) replaces the beta – install it from the menu.",
+          "Release \(version) ersetzt die Beta – über das Menü installieren.")
+    }
     static func menuInstallingUpdate(_ version: String) -> String {
         t("Installing Version \(version)…", "Version \(version) wird installiert …")
     }

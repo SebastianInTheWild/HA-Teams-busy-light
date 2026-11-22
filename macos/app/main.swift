@@ -240,7 +240,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             updateItem.isEnabled = false
             updateItem.isHidden = false
         } else if let version = updateChecker.availableVersion {
-            updateItem.title = updateChecker.downloadURL != nil ? L.menuInstallUpdate(version) : L.menuUpdate(version)
+            if updateChecker.isDowngrade {
+                updateItem.title = L.menuDowngrade(version)
+            } else {
+                updateItem.title = updateChecker.downloadURL != nil ? L.menuInstallUpdate(version) : L.menuUpdate(version)
+            }
             updateItem.isEnabled = true
             updateItem.isHidden = false
         } else {
@@ -508,7 +512,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         checkForUpdates { [weak self] result in
             guard let self else { return }
             switch result {
-            case .available:
+            case .available, .downgrade:
                 // Asks whether to install it, or opens the release page
                 self.updateClicked()
             case .upToDate(let version):
@@ -534,7 +538,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private func updateChanged() {
         refresh()
         let key = "notifiedVersion"
-        guard !checkingManually,
+        // No notification for going back: the user switched the channel
+        guard !checkingManually, !updateChecker.isDowngrade,
               let version = updateChecker.availableVersion,
               UserDefaults.standard.string(forKey: key) != version
         else { return }

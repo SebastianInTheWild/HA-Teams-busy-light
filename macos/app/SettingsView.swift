@@ -250,6 +250,8 @@ struct SettingsView: View {
                 model.updateCheckResult = (L.updateCheckLatest(version), true)
             case .available(let version):
                 model.updateCheckResult = (L.updateCheckAvailable(version), true)
+            case .downgrade(let version):
+                model.updateCheckResult = (L.updateCheckDowngrade(version), true)
             case .failed(let reason):
                 model.updateCheckResult = (L.updateCheckFailed(reason), false)
             }

@@ -53,6 +53,8 @@
     "MenuUpdate": "Update {0} verfügbar...",
     "UpdateBalloon": "Teams Busy Light {0} ist verfügbar. Klicke, um die Release-Seite zu öffnen.",
     "MenuInstallUpdate": "Version {0} installieren...",
+    "MenuDowngrade": "Zu Release {0} wechseln...",
+    "UpdateCheckDowngrade": "Release {0} ersetzt die Beta – über das Menü installieren.",
     "MenuCheckUpdates": "Nach Updates suchen...",
     "UpdateCheckLatest": "Du hast die neueste Version ({0}).",
     "UpdateCheckFailed": "Suche nach Updates fehlgeschlagen: {0}",

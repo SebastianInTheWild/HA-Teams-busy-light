@@ -16,6 +16,9 @@ final class UpdateChecker {
     private(set) var availableVersion: String?
     /// Download of the macOS app of that version, if it can be installed from the app
     private(set) var downloadURL: URL?
+    /// The offered version is the latest release, replacing an installed
+    /// pre-release (update channel switched back to Release)
+    private(set) var isDowngrade = false
     /// Release page of that version
     private(set) var releasePage = UpdateChecker.releasesPage
     var onChange: (() -> Void)?
@@ -34,6 +37,7 @@ final class UpdateChecker {
         guard enabled, currentVersion != "0.0.0" else {
             availableVersion = nil
             downloadURL = nil
+            isDowngrade = false
             onChange?()
             return
         }
@@ -53,6 +57,7 @@ final class UpdateChecker {
             checkedPreReleases = nil
             availableVersion = nil
             downloadURL = nil
+            isDowngrade = false
             onChange?()
         }
     }
@@ -64,6 +69,8 @@ final class UpdateChecker {
     enum CheckResult {
         case upToDate(String)
         case available(String)
+        /// Back to this release from an installed pre-release
+        case downgrade(String)
         case failed(String)
     }
 
@@ -99,20 +106,27 @@ final class UpdateChecker {
                 .flatMap { $0.absoluteString.hasPrefix("https://github.com/") ? $0 : nil }
             DispatchQueue.main.async {
                 self.checkedPreReleases = withPreReleases
-                let newer = Self.isNewer(latest, than: self.currentVersion) ? latest : nil
+                let offer = Self.offer(latest, current: self.currentVersion, preReleases: withPreReleases)
+                let newer = offer == nil ? nil : latest
+                let downgrade = offer == .downgrade
                 let url = newer == nil ? nil : downloadURL
                 // Evaluated on every check: a download added to the release
                 // later, or a switch of the channel, is picked up
-                if newer != self.availableVersion || url != self.downloadURL {
+                if newer != self.availableVersion || url != self.downloadURL || downgrade != self.isDowngrade {
                     if let newer {
-                        Log.write("Update available: \(newer)\(url != nil ? " (can be installed from the app)" : "")")
+                        Log.write("\(downgrade ? "Back to the release" : "Update available"): \(newer)\(url != nil ? " (can be installed from the app)" : "")")
                     }
                     self.availableVersion = newer
                     self.downloadURL = url
+                    self.isDowngrade = downgrade
                     self.releasePage = page ?? Self.releasesPage
                     self.onChange?()
                 }
-                completion?(newer.map(CheckResult.available) ?? .upToDate(self.currentVersion))
+                switch offer {
+                case .update?: completion?(.available(latest))
+                case .downgrade?: completion?(.downgrade(latest))
+                case nil: completion?(.upToDate(self.currentVersion))
+                }
             }
         }.resume()
     }
@@ -128,6 +142,17 @@ final class UpdateChecker {
 
     private static func trimmed(_ tag: String) -> String {
         tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
+    }
+
+    enum Offer { case update, downgrade }
+
+    /// What to offer for the latest version of the channel: an update if it
+    /// is newer; on the release channel with a pre-release installed, the
+    /// latest release even if it is older; otherwise nothing
+    static func offer(_ latest: String, current: String, preReleases: Bool) -> Offer? {
+        if isNewer(latest, than: current) { return .update }
+        if !preReleases, current.contains("-"), compare(latest, current) != 0 { return .downgrade }
+        return nil
     }
 
     static func isNewer(_ candidate: String, than current: String) -> Bool {

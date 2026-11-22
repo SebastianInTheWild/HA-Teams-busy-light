@@ -207,7 +207,8 @@ Every push is tested and then published by the release workflow:
 
 Each release is created as a draft and published only once the Windows and macOS downloads
 are attached. The apps offer only releases; with the **Update channel** **Beta (pre-releases)** in the
-settings also pre-releases. In HACS, turn on **Show beta versions** for the integration to
+settings also pre-releases. Switched back to **Release**, an app with a pre-release offers to
+go back to the latest release. In HACS, turn on **Show beta versions** for the integration to
 get them in Home Assistant.
 
 ## Add a language
