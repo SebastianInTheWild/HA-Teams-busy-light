@@ -138,11 +138,10 @@ set in the menu of the app), `app_version` and `platform`.
 
 Camera and microphone come from the operating system, so they also work with Zoom, Webex or a
 browser; with **Also detect calls in other apps** (on by default) the activity is `in_call`
-while any app uses the microphone. They stay unknown for apps older than 1.5.0. On newer
-Windows 11 versions (e.g. 26H2) Windows no longer reports which app uses the camera; the app
-then reads the camera from the events of the Windows camera service (experimental). If that
-log is turned off, the camera stays unknown. The microphone works on all versions. Example: a
-light that turns red only while the camera is on:
+while any app uses the microphone. They stay unknown for apps older than 1.5.0. On Windows the
+camera comes from the same source as the camera privacy indicator (Windows 10 1903 and newer),
+so it also works on newer Windows 11 versions and with virtual cameras that use a real camera
+(e.g. Insta360). Example: a light that turns red only while the camera is on:
 
 ```yaml
 triggers:

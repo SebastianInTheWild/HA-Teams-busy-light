@@ -370,10 +370,15 @@ $ManualStatuses = @('available', 'busy', 'do_not_disturb', 'be_right_back', 'awa
 # - Camera: Windows has no such interface. Older Windows versions record the
 #   use per app in the registry for the privacy settings ("recently used"):
 #   an app uses the device while LastUsedTimeStop is 0. Newer Windows 11
-#   versions keep this in a database only the system can read; then the
-#   events of the camera service are used (experimental, without app name,
-#   see Get-TeamsCameraFromEvents). Without both the camera is unknown ($null)
-#   and not sent.
+#   versions keep this in a database only the system can read. Therefore the
+#   sensor activity monitor of Media Foundation comes first (Windows 10 1903
+#   and newer, with the process; see Get-TeamsCameraUsers), combined with the
+#   registry: after an upgrade to a newer Windows version the old registry
+#   entries stay (with a stop time) and only show the camera off. Without the
+#   monitor the events of the camera service are the last resort
+#   (experimental; they do not tell on and off apart for Teams, seen on
+#   Windows 11 26H2 with a USB camera, 23.11.2026). Without any source the
+#   camera is unknown ($null) and not sent.
 #   The registry is also the fallback for the microphone.
 function Get-TeamsDeviceUsage {
     $Camera = Get-TeamsDeviceUsers 'webcam'
@@ -384,15 +389,27 @@ function Get-TeamsDeviceUsage {
         MicrophoneApps = @()
         MicrophoneSource = 'audio system'
     }
-    if ($Camera.Tracked) {
-        $Result.Camera = $Camera.Apps.Count -gt 0
-        $Result.CameraSource = 'registry'
+    $Sources = @()
+    $On = $Camera.Apps.Count -gt 0
+    if ($Camera.Tracked) { $Sources += 'registry' }
+    $MonitorApps = Get-TeamsCameraUsers
+    if ($null -ne $MonitorApps) {
+        $Sources += 'sensor activity monitor'
+        if ($MonitorApps.Count) {
+            $On = $true
+            $Result.CameraApps = @(@($Camera.Apps) + @($MonitorApps) | Sort-Object -Unique)
+        }
     }
     else {
-        $Result.Camera = Get-TeamsCameraFromEvents
-        if ($null -ne $Result.Camera) {
-            $Result.CameraSource = 'camera service events (experimental)'
+        $FromEvents = Get-TeamsCameraFromEvents
+        if ($null -ne $FromEvents) {
+            $Sources += 'camera service events (experimental)'
+            $On = $On -or $FromEvents
         }
+    }
+    if ($Sources.Count) {
+        $Result.Camera = $On
+        $Result.CameraSource = $Sources -join ' + '
     }
     $Apps = Get-TeamsMicrophoneUsers
     if ($null -eq $Apps) {
@@ -536,6 +553,171 @@ function Get-TeamsMicrophoneUsers {
         if ($Process) { $Process.ProcessName }
     })
     # The comma keeps an empty list from turning into $null
+    return , @($Names | Sort-Object -Unique)
+}
+
+$TeamsCameraMonitorSource = @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Text;
+
+namespace TeamsBusyLight {
+    [ComImport, Guid("39DC7F4A-B141-4719-813C-A7F46162A2B8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IMFSensorProcessActivity {
+        [PreserveSig] int GetProcessId(out uint pid);
+        [PreserveSig] int GetStreamingState(out int streaming);
+        [PreserveSig] int GetStreamingMode(out int mode);
+        [PreserveSig] int GetReportTime(out long time);
+    }
+
+    [ComImport, Guid("3E8C4BE1-A8C2-4528-90DE-2851BDE5FEAD"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IMFSensorActivityReport {
+        [PreserveSig] int GetFriendlyName([MarshalAs(UnmanagedType.LPWStr)] StringBuilder name, uint cch, out uint written);
+        [PreserveSig] int GetSymbolicLink([MarshalAs(UnmanagedType.LPWStr)] StringBuilder link, uint cch, out uint written);
+        [PreserveSig] int GetProcessCount(out uint count);
+        [PreserveSig] int GetProcessActivity(uint index, out IMFSensorProcessActivity activity);
+    }
+
+    [ComImport, Guid("683F7A5E-4A19-43CD-B1A9-DBF4AB3F7777"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IMFSensorActivitiesReport {
+        [PreserveSig] int GetCount(out uint count);
+        [PreserveSig] int GetActivityReport(uint index, out IMFSensorActivityReport report);
+        [PreserveSig] int GetActivityReportByDeviceName([MarshalAs(UnmanagedType.LPWStr)] string name, out IMFSensorActivityReport report);
+    }
+
+    [ComImport, Guid("DE5072EE-DBE3-46DC-8A87-B6F631194751"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IMFSensorActivitiesReportCallback {
+        [PreserveSig] int OnActivitiesReport(IMFSensorActivitiesReport report);
+    }
+
+    [ComImport, Guid("D0CEF145-B3F4-4340-A2E5-7A5080CA05CB"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IMFSensorActivityMonitor {
+        [PreserveSig] int Start();
+        [PreserveSig] int Stop();
+    }
+
+    // Camera use as Windows reports it for the privacy indicator: Media
+    // Foundation's sensor activity monitor tells, per camera, which processes
+    // stream from it. The callback runs on a Media Foundation thread.
+    [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
+    public class CameraMonitor : IMFSensorActivitiesReportCallback {
+        [DllImport("mfplat.dll")] static extern int MFStartup(int version, int flags);
+        [DllImport("mfsensorgroup.dll")] static extern int MFCreateSensorActivityMonitor(IMFSensorActivitiesReportCallback callback, out IMFSensorActivityMonitor monitor);
+
+        static readonly object Lock = new object();
+        static CameraMonitor instance;
+        static IMFSensorActivityMonitor monitor;
+        // Symbolic link of the camera -> IDs of the processes streaming from it
+        static readonly Dictionary<string, int[]> streaming = new Dictionary<string, int[]>(StringComparer.OrdinalIgnoreCase);
+        public static int Reports;
+        // Last report per camera for the diagnostics: name, link, pid:streaming:mode
+        static readonly Dictionary<string, string> details = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        public static string Details() {
+            lock (Lock) {
+                var lines = new List<string>(details.Values);
+                return string.Join(Environment.NewLine, lines.ToArray());
+            }
+        }
+
+        public static void Start() {
+            lock (Lock) {
+                if (monitor != null) return;
+                Marshal.ThrowExceptionForHR(MFStartup(0x20070 /* MF_VERSION */, 0));
+                instance = new CameraMonitor();
+                IMFSensorActivityMonitor created;
+                Marshal.ThrowExceptionForHR(MFCreateSensorActivityMonitor(instance, out created));
+                Marshal.ThrowExceptionForHR(created.Start());
+                monitor = created;
+            }
+        }
+
+        // IDs of all processes streaming from any camera right now
+        public static int[] StreamingProcessIds() {
+            var result = new List<int>();
+            lock (Lock) {
+                foreach (var ids in streaming.Values)
+                    foreach (var id in ids)
+                        if (!result.Contains(id)) result.Add(id);
+            }
+            return result.ToArray();
+        }
+
+        public int OnActivitiesReport(IMFSensorActivitiesReport report) {
+            try {
+                uint count;
+                if (report.GetCount(out count) != 0) return 0;
+                var update = new Dictionary<string, int[]>();
+                var text = new Dictionary<string, string>();
+                for (uint i = 0; i < count; i++) {
+                    IMFSensorActivityReport device;
+                    if (report.GetActivityReport(i, out device) != 0 || device == null) continue;
+                    try {
+                        var link = new StringBuilder(1024);
+                        var name = new StringBuilder(256);
+                        uint written;
+                        if (device.GetSymbolicLink(link, (uint)link.Capacity, out written) != 0) continue;
+                        device.GetFriendlyName(name, (uint)name.Capacity, out written);
+                        uint processes;
+                        if (device.GetProcessCount(out processes) != 0) continue;
+                        var ids = new List<int>();
+                        var line = new StringBuilder();
+                        line.Append(name).Append(" [").Append(link).Append("]:");
+                        for (uint j = 0; j < processes; j++) {
+                            IMFSensorProcessActivity activity;
+                            if (device.GetProcessActivity(j, out activity) != 0 || activity == null) continue;
+                            try {
+                                uint pid = 0; int state = 0, mode = -1;
+                                activity.GetProcessId(out pid);
+                                activity.GetStreamingState(out state);
+                                activity.GetStreamingMode(out mode);
+                                line.Append(' ').Append(pid).Append(':').Append(state != 0 ? "streaming" : "idle").Append(':').Append(mode == 0 ? "controller" : "shared");
+                                if (state != 0 && pid != 0) ids.Add((int)pid);
+                            }
+                            finally { Marshal.ReleaseComObject(activity); }
+                        }
+                        update[link.ToString()] = ids.ToArray();
+                        text[link.ToString()] = line.ToString();
+                    }
+                    finally { Marshal.ReleaseComObject(device); }
+                }
+                lock (Lock) {
+                    foreach (var pair in update) streaming[pair.Key] = pair.Value;
+                    foreach (var pair in text) details[pair.Key] = pair.Value;
+                    Reports++;
+                }
+            }
+            catch { }
+            return 0;
+        }
+    }
+}
+'@
+
+# Names of the processes streaming from a camera right now (e.g. "ms-teams"):
+# an empty list when none, $null when Windows offers no sensor activity monitor
+# (before Windows 10 1903). The monitor keeps running in the background once
+# started; it reports the current state right after the start and then every
+# change.
+function Get-TeamsCameraUsers {
+    if ($null -eq $script:TeamsCameraMonitorReady) {
+        try {
+            Add-Type -TypeDefinition $TeamsCameraMonitorSource -ErrorAction Stop
+            [TeamsBusyLight.CameraMonitor]::Start()
+            $script:TeamsCameraMonitorReady = $true
+        }
+        catch {
+            $script:TeamsCameraMonitorReady = $false
+        }
+    }
+    if (-not $script:TeamsCameraMonitorReady) {
+        return $null
+    }
+    $Names = @(foreach ($Id in [TeamsBusyLight.CameraMonitor]::StreamingProcessIds()) {
+        $Process = Get-Process -Id $Id -ErrorAction SilentlyContinue
+        if ($Process) { $Process.ProcessName }
+    })
     return , @($Names | Sort-Object -Unique)
 }
 
