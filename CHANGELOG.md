@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.7.1
+
+* Windows: the camera now comes from the sensor activity monitor of Windows (the source of the camera privacy indicator, Windows 10 1903 and newer) and is reported with the app using it. Before, newer Windows 11 versions showed it off all the time: old registry entries from before an upgrade hid the newer source, and the events of the camera service do not tell on and off apart for Teams. Also works with virtual cameras that use a real camera (tested with the Insta360 virtual camera)
+* Windows: **Copy diagnostics** shows the app using the camera
+
 ## 1.7.0
 
 * Releases: every merge into `main` publishes a release, every push to another branch a pre-release (`<version>-beta.<n>`) once the version is bumped; a release is published only with both app downloads attached
