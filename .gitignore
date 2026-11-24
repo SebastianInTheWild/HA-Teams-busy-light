@@ -23,3 +23,7 @@ teams-busy-light-signing-windows/
 
 # Built downloads (windows/tools/build-release.ps1)
 dist/
+
+# Build output of the Windows app (windows/app, windows/tests)
+windows/*/bin/
+windows/*/obj/

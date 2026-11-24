@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.0
+
+* Windows: the app is now a Windows program in C# (`TeamsBusyLight.exe`, .NET Framework 4.8 of Windows 10/11) instead of PowerShell scripts, like the Swift app on macOS. It starts no PowerShell any more: security software (EDR) reported the hidden PowerShell with `-ExecutionPolicy Bypass`, started by a program compiled on the PC, as suspicious. Same functions, settings window, tray menu, settings files and log
+* Windows: install by double-clicking `TeamsBusyLight.exe` of the download (no `Install.cmd`); uninstall under Installed apps or with `--uninstall`. `--set-status <status>` replaces `TeamsBusyLight.ps1 -SetStatus`
+* Windows: versions 1.7.x update themselves to the program with **Install version …**; the settings are kept and the scripts are removed. The download is checked with a signed list of the SHA-256 hashes of its files (`TeamsBusyLight.sha256.p7m`) and still contains the signed catalog for the update from 1.7.x
+* Windows: the installer no longer removes the Windows service of the versions before 1.3.0 (install 1.7.1 first, or remove it by hand)
+* Windows: the icon in the program is stored uncompressed; compressed images looked like packed data to security software
+
 ## 1.7.1
 
 * Windows: the camera now comes from the sensor activity monitor of Windows (the source of the camera privacy indicator, Windows 10 1903 and newer) and is reported with the app using it. Before, newer Windows 11 versions showed it off all the time: old registry entries from before an upgrade hid the newer source, and the events of the camera service do not tell on and off apart for Teams. Also works with virtual cameras that use a real camera (tested with the Insta360 virtual camera)

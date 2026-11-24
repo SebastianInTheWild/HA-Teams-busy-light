@@ -59,13 +59,14 @@ Lost the URL? Open the integration and click **Configure**:
 #### Windows
 
 Download `TeamsBusyLight-Windows.zip` from the [latest release](https://github.com/SebastianInTheWild/HA-Teams-busy-light/releases/latest),
-unzip it and double-click `Install.cmd`.
+unzip it and double-click `TeamsBusyLight.exe` (SmartScreen may ask once: **More info** →
+**Run anyway**).
 
 No administrator rights are needed. The installer asks for the webhook URL, then Teams
 Busy Light runs in the notification area of the taskbar and starts at sign-in. Every
-Windows user installs it for themselves with their own integration entry. The Windows
-service of earlier versions is replaced. Remove it later under Settings → Apps →
-Installed apps.
+Windows user installs it for themselves with their own integration entry. It is a single
+program (C#, .NET Framework 4.8 of Windows) without scripts; the PowerShell versions up to
+1.7.x update themselves to it. Remove it later under Settings → Apps → Installed apps.
 Details: [windows/README.md](windows/README.md)
 
 #### macOS
@@ -214,7 +215,7 @@ get them in Home Assistant.
 
 On Windows, the status is written to the Teams log in the language of the Teams app (macOS
 needs no language patterns). Add the wording of
-your language to [`windows/Languages.ps1`](windows/Languages.ps1) and open a pull request.
+your language to [`windows/app/StatusPatterns.cs`](windows/app/StatusPatterns.cs) and open a pull request.
 
 ## Troubleshooting
 

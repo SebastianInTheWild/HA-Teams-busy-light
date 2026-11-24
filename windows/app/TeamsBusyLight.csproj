@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Teams Busy Light for Windows: tray app, installer and uninstaller in one
+    executable. Targets the .NET Framework 4.8 that ships with Windows 10/11,
+    so nothing has to be installed. The release workflow builds it with
+    windows/tools/build-release.ps1 (dotnet build, version passed in).
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>TeamsBusyLight</RootNamespace>
+    <AssemblyName>TeamsBusyLight</AssemblyName>
+    <Product>Teams Busy Light</Product>
+    <AssemblyTitle>Teams Busy Light</AssemblyTitle>
+    <Description>Sends the Microsoft Teams status to Home Assistant</Description>
+    <Company>SebastianInTheWild</Company>
+    <Copyright>https://github.com/SebastianInTheWild/HA-Teams-busy-light</Copyright>
+    <Version>0.0.0</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <!-- Uncompressed images: PNG images in the icon resource look like packed
+         data to security software (see tools/New-UncompressedIcon.ps1) -->
+    <ApplicationIcon>app-icon.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Deterministic>true</Deterministic>
+    <DebugType>none</DebugType>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- The .exe.config is not needed: the app has no dependencies -->
+    <GenerateSupportedRuntime>false</GenerateSupportedRuntime>
+    <AutoGenerateBindingRedirects>false</AutoGenerateBindingRedirects>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reference assemblies, so it builds without the .NET Framework developer pack -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Security" />
+    <Reference Include="System.ServiceProcess" />
+    <Reference Include="System.Web.Extensions" />
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\Translations\*.json" LogicalName="Translations.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="app-icon.ico" LogicalName="app-icon.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TeamsBusyLight.Tests" />
+  </ItemGroup>
+
+</Project>

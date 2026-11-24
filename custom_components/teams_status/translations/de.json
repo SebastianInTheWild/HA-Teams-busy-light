@@ -13,14 +13,14 @@
       }
     },
     "create_entry": {
-      "default": "Fertig! Gib diese Webhook-URL im Installer auf deinem Rechner ein (Windows: Install.cmd, macOS: install.sh):\n\n`{webhook_url}`\n\nDu findest sie später auch in den Optionen der Integration."
+      "default": "Fertig! Gib diese Webhook-URL im Installer auf deinem Rechner ein (Windows: TeamsBusyLight.exe, macOS: install.sh):\n\n`{webhook_url}`\n\nDu findest sie später auch in den Optionen der Integration."
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Teams Busy Light",
-        "description": "Webhook-URL für den Installer (Windows: Install.cmd, macOS: install.sh):\n\n`{webhook_url}`",
+        "description": "Webhook-URL für den Installer (Windows: TeamsBusyLight.exe, macOS: install.sh):\n\n`{webhook_url}`",
         "data": {
           "timeout": "Timeout"
         },
@@ -97,7 +97,7 @@
   "issues": {
     "outdated_app": {
       "title": "Teams-Busy-Light-App auf {computer} ist veraltet",
-      "description": "Die Teams-Busy-Light-App auf {computer} hat Version {app_version}, die Integration Version {integration_version}. Aktualisiere die App: im Menü „Version … installieren“ wählen oder den Installer des neuesten Releases ausführen (Windows: Install.cmd, macOS: install.sh). Dieser Hinweis verschwindet, sobald sich die aktualisierte App meldet."
+      "description": "Die Teams-Busy-Light-App auf {computer} hat Version {app_version}, die Integration Version {integration_version}. Aktualisiere die App: im Menü „Version … installieren“ wählen oder den Installer des neuesten Releases ausführen (Windows: TeamsBusyLight.exe, macOS: install.sh). Dieser Hinweis verschwindet, sobald sich die aktualisierte App meldet."
     }
   }
 }

@@ -8,6 +8,9 @@ Microsoft Teams client to the **Teams Busy Light** integration in Home Assistant
 Windows counterpart of the [macOS app](../macos/README.md) and uses the same integration,
 sensors and blueprint.
 
+It is a single program, `TeamsBusyLight.exe` (C#, .NET Framework 4.8, which ships with
+Windows 10 and 11; source in [`app`](app)). It runs no scripts and starts no PowerShell.
+
 ## Introduction
 
 We're working a lot at our home office these days. Several people already found solutions to make working in the home office more comfortable. One of these ways is to automate activities in your home automation system based on your status on Microsoft Teams.
@@ -26,7 +29,7 @@ The states are language-neutral; Home Assistant shows them translated (German/En
 
 ### Language of the Teams app
 
-On Windows, Teams writes the status in the language of the app. `Languages.ps1` contains
+On Windows, Teams writes the status in the language of the app. [`app/StatusPatterns.cs`](app/StatusPatterns.cs) contains
 the patterns per language (currently German and English). By default the language is
 detected automatically; it can be set in the settings.
 
@@ -48,17 +51,13 @@ later under **Configure**).
 
 No administrator rights are needed. Download `TeamsBusyLight-Windows.zip` from the
 [latest release](https://github.com/SebastianInTheWild/HA-Teams-busy-light/releases/latest),
-unzip it and double-click `Install.cmd`. Alternatively, run in PowerShell, in that folder:
-
-```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
-.\Install.ps1
-```
+unzip it and double-click `TeamsBusyLight.exe`. The program is not signed with a certificate
+Windows knows, so SmartScreen may ask once: **More info** → **Run anyway**.
 
 The installer shows the settings (see below); paste the webhook URL and click **Send test**,
 then **Install**. It
 
-* copies the app to `%LOCALAPPDATA%\Programs\TeamsBusyLight` (settings and log in
+* copies `TeamsBusyLight.exe` to `%LOCALAPPDATA%\Programs\TeamsBusyLight` (settings and log in
   `%LOCALAPPDATA%\TeamsBusyLight`),
 * adds it to the Start menu, to "Installed apps" and to the Windows sign-in,
 * starts it.
@@ -66,9 +65,19 @@ then **Install**. It
 Every Windows user installs Teams Busy Light for themselves, with their own integration
 entry and webhook URL.
 
-To update, choose **Install version …** in the menu when Teams Busy Light shows a new release, or run `Install.cmd` of the new release; the settings are kept either way. **Check for updates...** in the menu (or **Check for updates** under General in the settings) asks right away, also when the daily check is off.
+To update, choose **Install version …** in the menu when Teams Busy Light shows a new release, or start `TeamsBusyLight.exe` of the new release; the settings are kept either way. **Check for updates...** in the menu (or **Check for updates** under General in the settings) asks right away, also when the daily check is off.
 
-The update function installs a download only if it is signed with the project's own certificate and none of its files was changed, added or removed (the release contains a signed catalog `TeamsBusyLight.cat` with the hashes of all files). Windows does not need to trust the certificate; the app checks it against the fingerprint it ships with. Nothing is installed without your confirmation, and steps that need administrator rights (hosts file, removing the old service) stay with `Install.cmd`.
+The update function installs a download only if it is signed with the project's own certificate and none of its files was changed, added or removed (the release contains the signed list `TeamsBusyLight.sha256.p7m` with the SHA-256 hashes of all files). Windows does not need to trust the certificate; the app checks it against the fingerprint it ships with. Nothing is installed without your confirmation, and the hosts file entry (administrator rights) stays with the installer.
+
+### Update from the PowerShell versions (1.7.x and older)
+
+Up to 1.7.x Teams Busy Light was a set of PowerShell scripts with a small starter. Security
+software may report that pattern (a hidden PowerShell with `-ExecutionPolicy Bypass`, started
+by a program compiled on the PC). **Install version …** in their menu updates them to the
+program: the download still contains an `Install.ps1` and the signed catalog
+`TeamsBusyLight.cat` that these versions check, and that script only starts the new
+program. Starting `TeamsBusyLight.exe` of the download works as well. The settings, the
+pause and a manually set status are kept; the scripts are removed from the program folder.
 
 ### Hosts file entry (optional)
 
@@ -79,10 +88,10 @@ name via the DNS servers of the active LAN/Wi-Fi adapters and adds it to the hos
 
 ### Update from the Windows service (1.2.0 and older)
 
-Earlier versions ran as the Windows service `Microsoft Teams Status Monitor` from
-`C:\Scripts\TeamsStatus`. The installer takes over the webhook URL of the signed-in user
-and removes the service and the folder (one UAC prompt). Other Windows users of the PC then
-have to install Teams Busy Light for themselves.
+The Windows service `Microsoft Teams Status Monitor` of these versions is no longer removed by
+the installer. Install version 1.7.1 first (its installer removes the service), or remove it
+by hand: `sc.exe delete "Microsoft Teams Status Monitor"` as administrator, then delete
+`C:\Scripts\TeamsStatus`.
 
 ### Tray icon
 
@@ -136,7 +145,7 @@ the last log lines (without the webhook ID) for a bug report.
 * Log with every change (**Open log** in the menu): `%LOCALAPPDATA%\TeamsBusyLight\TeamsBusyLight.log`
 * Send a status manually to test the connection:
   ```powershell
-  & "$env:LOCALAPPDATA\Programs\TeamsBusyLight\TeamsBusyLight.ps1" -SetStatus busy
+  & "$env:LOCALAPPDATA\Programs\TeamsBusyLight\TeamsBusyLight.exe" --set-status busy | Out-Host
   ```
 
 ## Troubleshooting
@@ -146,14 +155,29 @@ the last log lines (without the webhook ID) for a bug report.
   the installer again and tick the hosts file entry.
 * **Status stays unknown:** look at the `SetTaskbarIconOverlay` / `SetBadge` lines in the
   newest `MSTeams_*.log` (`%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\Logs`).
-  If your Teams language is not supported, add the wording to `Languages.ps1` or
+  If your Teams language is not supported, add the wording to `app/StatusPatterns.cs` or
   [open an issue](https://github.com/SebastianInTheWild/HA-Teams-busy-light/issues/new/choose)
   with the line (remove personal data).
 * **The hosts file entry was not added:** confirm the UAC prompt; run the installer again.
 
 ## Uninstall
 
-Remove **Teams Busy Light** under Settings → Apps → Installed apps, or run `Uninstall.ps1`
-from the downloaded folder. It stops and removes the app, its Start menu entry, the sign-in
+Remove **Teams Busy Light** under Settings → Apps → Installed apps, or run
+`TeamsBusyLight.exe --uninstall`. It stops and removes the app, its Start menu entry, the sign-in
 entry, the settings and the log. It asks whether to remove the hosts file entries as well
 (UAC prompt). The Home Assistant integration entry is not changed.
+
+## Building
+
+Needs the .NET SDK (any current version; the reference assemblies of .NET Framework 4.8 come
+from NuGet):
+
+```powershell
+dotnet test windows/tests                                  # tests of the logic
+dotnet build windows/app -c Release                        # windows/app/bin/Release/net48/TeamsBusyLight.exe
+./windows/tools/build-release.ps1 -Version 1.8.0 -OutputPath dist   # the download, as in the release
+```
+
+The icon embedded in the program (`app/app-icon.ico`) holds uncompressed images, made from
+`icon.ico` with `tools/New-UncompressedIcon.ps1`: compressed images look like packed data to
+security software.
