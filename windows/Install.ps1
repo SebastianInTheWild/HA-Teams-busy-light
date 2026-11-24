@@ -3,8 +3,9 @@
     Installs Teams Busy Light for the signed-in Windows user.
 .DESCRIPTION
     Shows the settings window, copies the app to
-    %LOCALAPPDATA%\Programs\TeamsBusyLight, builds TeamsBusyLight.exe (a small
-    starter without console window), adds it to the Start menu, the Windows
+    %LOCALAPPDATA%\Programs\TeamsBusyLight with TeamsBusyLight.exe (a small
+    starter without console window; built here only in a checkout of the
+    repository), adds it to the Start menu, the Windows
     sign-in and "Installed apps", and starts it.
     No administrator rights are needed. A UAC prompt only appears for the
     optional hosts file entry and when the Windows service of earlier versions
@@ -116,14 +117,14 @@ Copy-Item -Path (Join-Path $PSScriptRoot 'Translations\*.json') -Destination (Jo
 
 Set-Content -Path (Join-Path $ProgramDir 'version.txt') -Value $Version -Encoding ASCII
 
-# Build the starter with the C# compiler of the .NET Framework
-$Compiler = Join-Path ([System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()) 'csc.exe'
-$CompilerOutput = & $Compiler /nologo /target:winexe /optimize+ `
-    "/win32icon:$(Join-Path $ProgramDir 'icon.ico')" `
-    "/out:$LauncherPath" `
-    (Join-Path $PSScriptRoot 'Launcher.cs') 2>&1
-if ($LASTEXITCODE -ne 0) {
-    throw "TeamsBusyLight.exe could not be built:`n$($CompilerOutput -join "`n")"
+# The starter comes built with the release download; only a checkout of the
+# repository builds it here
+$BuiltLauncher = Join-Path $PSScriptRoot 'TeamsBusyLight.exe'
+if (Test-Path -LiteralPath $BuiltLauncher) {
+    Copy-Item -LiteralPath $BuiltLauncher -Destination $LauncherPath
+}
+else {
+    New-TeamsLauncher -SourceDir $PSScriptRoot -Destination $LauncherPath
 }
 Get-ChildItem -Path $ProgramDir -Recurse -File | Unblock-File
 

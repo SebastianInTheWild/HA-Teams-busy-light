@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.2
+
+* Windows: the starter `TeamsBusyLight.exe` now comes built with the download instead of being compiled on the PC during the installation; it is the same file on all PCs and can be released once per version by security software (before, every installation built a different file, which security software reported as suspicious). Its icon is embedded uncompressed, so it no longer looks like packed data
+
 ## 1.7.1
 
 * Windows: the camera now comes from the sensor activity monitor of Windows (the source of the camera privacy indicator, Windows 10 1903 and newer) and is reported with the app using it. Before, newer Windows 11 versions showed it off all the time: old registry entries from before an upgrade hid the newer source, and the events of the camera service do not tell on and off apart for Teams. Also works with virtual cameras that use a real camera (tested with the Insta360 virtual camera)

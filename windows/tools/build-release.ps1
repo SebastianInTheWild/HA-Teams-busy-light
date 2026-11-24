@@ -3,7 +3,8 @@
     Builds the Windows download TeamsBusyLight-Windows.zip.
 .DESCRIPTION
     Copies the app files (without tools) to <OutputPath>\TeamsBusyLight-Windows,
-    writes version.txt and, with a signing certificate, creates the catalog
+    writes version.txt, builds the starter TeamsBusyLight.exe and, with a
+    signing certificate, creates the catalog
     TeamsBusyLight.cat with the SHA-256 hashes of all files and signs it with
     a timestamp. The update function of the app installs only downloads whose
     catalog is signed with the certificate pinned in Common.ps1 and whose files
@@ -45,6 +46,8 @@ New-Item -Path $StageDir -ItemType Directory | Out-Null
 Get-ChildItem -LiteralPath $SourceDir | Where-Object { $_.Name -ne 'tools' } |
     Copy-Item -Destination $StageDir -Recurse
 [System.IO.File]::WriteAllText((Join-Path $StageDir 'version.txt'), $Version.TrimStart('v'), (New-Object System.Text.ASCIIEncoding))
+# The starter, built once here instead of on every PC (in the catalog below)
+New-TeamsLauncher -SourceDir $SourceDir -Destination (Join-Path $StageDir 'TeamsBusyLight.exe')
 
 if ($PfxBase64) {
     $PfxPath = Join-Path ([System.IO.Path]::GetTempPath()) ('TeamsBusyLight-{0}.pfx' -f [guid]::NewGuid())

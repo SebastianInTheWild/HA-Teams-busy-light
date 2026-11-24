@@ -2,9 +2,9 @@
 //
 // "powershell.exe -WindowStyle Hidden" still flashes a window, and with
 // Windows Terminal as the default terminal it may stay visible. This small
-// program starts PowerShell without any console instead. The installer
-// compiles it with the C# compiler of the .NET Framework that ships with
-// Windows, so no prebuilt executable is needed.
+// program starts PowerShell without any console instead. The release
+// workflow compiles it with the C# compiler of the .NET Framework that ships
+// with Windows (New-TeamsLauncher in Common.ps1) and ships it in the download.
 //
 // Arguments are passed on to the script, e.g. TeamsBusyLight.exe -Settings
 using System;
