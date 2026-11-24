@@ -20,6 +20,10 @@
     Target folder, by default teams-busy-light-signing-windows in the user
     profile. Never inside the repository.
 #>
+# The password is generated here and written to password.txt for the GitHub
+# secret anyway; SecureString only hands it to Export-PfxCertificate
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '',
+    Justification = 'Random password created by this script, stored in plain text for the GitHub secret by design')]
 param(
     [string]$OutputPath = (Join-Path $HOME 'teams-busy-light-signing-windows')
 )
