@@ -152,5 +152,6 @@
 
     "ConfirmUninstall": "Teams Busy Light für diesen Windows-Benutzer entfernen? Der Integrationseintrag in Home Assistant wird nicht geändert.",
     "UninstallHosts": "Auch die Einträge von Teams Busy Light aus der Windows-Hosts-Datei entfernen (benötigt Administratorrechte)?",
+    "UninstallIncomplete": "Teams Busy Light wurde entfernt, aber nicht alles ließ sich löschen:\n{0}\n\nLösche den Rest von Hand (Ordner TeamsBusyLight unter %LOCALAPPDATA% und %LOCALAPPDATA%\\Programs).",
     "UninstallComplete": "Teams Busy Light wurde entfernt. Integrationseinträge in Home Assistant wurden nicht geändert."
 }

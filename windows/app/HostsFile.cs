@@ -119,19 +119,7 @@ namespace TeamsBusyLight
         static bool Update(Func<List<string>, List<string>> transform)
         {
             var encoding = Encoding.Default;
-            FileStream stream = null;
-            for (var attempt = 1; stream == null; attempt++)
-            {
-                try
-                {
-                    stream = new FileStream(HostsPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-                }
-                catch (IOException) when (attempt < 20)
-                {
-                    Thread.Sleep(500);
-                }
-            }
-            using (stream)
+            using (var stream = FileRetry.Run(() => new FileStream(HostsPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)))
             {
                 var original = new byte[stream.Length];
                 var read = 0;
@@ -174,7 +162,10 @@ namespace TeamsBusyLight
         {
             var servers = NetworkInterface.GetAllNetworkInterfaces()
                 .Where(item => item.OperationalStatus == OperationalStatus.Up && IsLanAdapter(item))
-                .SelectMany(item => item.GetIPProperties().DnsAddresses)
+                .Select(item => item.GetIPProperties())
+                // A LAN or Wi-Fi network has a gateway; many VPN adapters have none
+                .Where(properties => properties.GatewayAddresses.Any(gateway => !gateway.Address.Equals(IPAddress.Any) && !gateway.Address.Equals(IPAddress.IPv6Any)))
+                .SelectMany(properties => properties.DnsAddresses)
                 .Where(server => server.AddressFamily == AddressFamily.InterNetwork && server.GetAddressBytes()[0] != 127)
                 .Distinct();
             foreach (var server in servers)
@@ -192,15 +183,22 @@ namespace TeamsBusyLight
             return null;
         }
 
+        // Words in the description or name of virtual and VPN adapters
+        static readonly string[] VirtualAdapterWords =
+        {
+            "Virtual", "VPN", "TAP-", "Hyper-V", "Tunnel", "WireGuard", "Wintun", "Tailscale", "ZeroTier",
+            "AnyConnect", "GlobalProtect", "PANGP", "Fortinet", "Forti", "Zscaler", "NordLynx", "OpenVPN",
+            "Juniper", "Pulse Secure", "Check Point", "SonicWall", "Npcap", "Loopback", "VMware", "VirtualBox",
+        };
+
         static bool IsLanAdapter(NetworkInterface item)
         {
             var wired = item.NetworkInterfaceType == NetworkInterfaceType.Ethernet || item.NetworkInterfaceType == NetworkInterfaceType.GigabitEthernet ||
                         item.NetworkInterfaceType == NetworkInterfaceType.FastEthernetT || item.NetworkInterfaceType == NetworkInterfaceType.FastEthernetFx;
             if (!wired && item.NetworkInterfaceType != NetworkInterfaceType.Wireless80211) return false;
             // Virtual adapters (Hyper-V, VPN clients) report themselves as Ethernet
-            var description = item.Description ?? "";
-            return new[] { "Virtual", "VPN", "TAP-", "Hyper-V", "Tunnel", "WireGuard" }
-                .All(word => description.IndexOf(word, StringComparison.OrdinalIgnoreCase) < 0);
+            var text = (item.Description ?? "") + " " + (item.Name ?? "");
+            return VirtualAdapterWords.All(word => text.IndexOf(word, StringComparison.OrdinalIgnoreCase) < 0);
         }
 
         /// <summary>A plain DNS query for the A record of a name at one server (UDP)</summary>

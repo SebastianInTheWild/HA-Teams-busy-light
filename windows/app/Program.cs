@@ -42,7 +42,7 @@ namespace TeamsBusyLight
             try
             {
                 if (Has("--set-status")) return SetStatus(After("--set-status"), After("--set-status", 2));
-                if (Has("--admin-hosts")) return HostsFile.Run(args.SkipWhile(arg => arg.ToLowerInvariant() != "--admin-hosts").Skip(1).ToArray());
+                if (Has("--admin-hosts")) return HostsFile.Run(args.Skip(Array.IndexOf(options, "--admin-hosts") + 1).ToArray());
                 if (Has("--uninstall")) return Installer.Uninstall();
                 if (Has("--install") || !AppPaths.IsInstalledCopy) return Installer.Install(Has("--quiet"));
                 return RunTray(Has("--settings"));

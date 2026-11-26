@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -20,14 +22,15 @@ namespace TeamsBusyLight
     /// </summary>
     internal static class Installer
     {
-        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        static extern bool DeleteFile(string path);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "DeleteFileW")]
+        static extern bool DeleteStream(string path);
 
         /// <summary>--install: with the settings window, or --quiet for an update from the app</summary>
         public static int Install(bool quiet)
         {
             var isUpdate = File.Exists(AppPaths.SettingsPath);
             var settings = Settings.Load();
+            var loaded = Settings.Load();
             var autostart = isUpdate ? GetAutostart() : true;
             var addHosts = false;
             if (quiet)
@@ -45,6 +48,7 @@ namespace TeamsBusyLight
 
             // Replace the program file of a running instance
             StopRunning();
+            if (!quiet) KeepNetworkAnswers(settings, loaded);
             try
             {
                 CopyProgram();
@@ -91,6 +95,24 @@ namespace TeamsBusyLight
         /// Puts this executable into the program folder. Removes everything
         /// else there, e.g. the scripts of the PowerShell versions.
         /// </summary>
+        /// <summary>
+        /// Takes over the answers to "new network?" the running app saved while
+        /// the installer window was open; saving the window would drop them
+        /// </summary>
+        static void KeepNetworkAnswers(Settings settings, Settings loaded)
+        {
+            var saved = Settings.Load();
+            settings.HomeNetworks = HomeNetwork.Add(settings.HomeNetworks, AddedNetworks(loaded.HomeNetworks, saved.HomeNetworks));
+            settings.IgnoredNetworks = HomeNetwork.Add(settings.IgnoredNetworks, AddedNetworks(loaded.IgnoredNetworks, saved.IgnoredNetworks));
+            if (loaded.AskForNewNetworks && !saved.AskForNewNetworks) settings.AskForNewNetworks = false;
+        }
+
+        static string[] AddedNetworks(string before, string after)
+        {
+            var old = HomeNetwork.Split(before);
+            return HomeNetwork.Split(after).Where(network => !old.Contains(network, StringComparer.OrdinalIgnoreCase)).ToArray();
+        }
+
         static void CopyProgram()
         {
             var source = Path.GetFullPath(AppPaths.CurrentExe);
@@ -101,35 +123,40 @@ namespace TeamsBusyLight
                 // The program file is overwritten below (or is this one): if
                 // copying fails, the previous version is still there
                 if (string.Equals(entry.FullName, target, StringComparison.OrdinalIgnoreCase)) continue;
-                Retry(() =>
+                FileRetry.Run(() =>
                 {
-                    if (entry is DirectoryInfo folder) folder.Delete(true);
-                    else entry.Delete();
+                    if (entry is DirectoryInfo folder) DeleteFolder(folder.FullName);
+                    else DeleteFileForce(entry.FullName);
                 });
             }
             if (!string.Equals(source, target, StringComparison.OrdinalIgnoreCase))
             {
-                Retry(() => File.Copy(source, AppPaths.ExePath, true));
+                FileRetry.Run(() =>
+                {
+                    // A read-only file cannot be overwritten
+                    if (File.Exists(AppPaths.ExePath)) File.SetAttributes(AppPaths.ExePath, FileAttributes.Normal);
+                    File.Copy(source, AppPaths.ExePath, true);
+                });
                 // Not from the internet any more: no SmartScreen prompt at every start
-                DeleteFile(AppPaths.ExePath + ":Zone.Identifier");
+                DeleteStream(AppPaths.ExePath + ":Zone.Identifier");
             }
         }
 
-        /// <summary>A file of an instance that just exited may still be locked for a moment</summary>
-        static void Retry(Action action)
+        /// <summary>Deletes a file, also a read-only one; a missing file is fine</summary>
+        static void DeleteFileForce(string path)
         {
-            for (var attempt = 1; ; attempt++)
-            {
-                try
-                {
-                    action();
-                    return;
-                }
-                catch (Exception exception) when ((exception is IOException || exception is UnauthorizedAccessException) && attempt < 20)
-                {
-                    Thread.Sleep(500);
-                }
-            }
+            if (!File.Exists(path)) return;
+            File.SetAttributes(path, FileAttributes.Normal);
+            File.Delete(path);
+        }
+
+        /// <summary>Deletes a folder with its content, also read-only files</summary>
+        static void DeleteFolder(string path)
+        {
+            if (!Directory.Exists(path)) return;
+            foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
+                File.SetAttributes(file, FileAttributes.Normal);
+            Directory.Delete(path, true);
         }
 
         /// <summary>Starts the installed program (the tray app)</summary>
@@ -199,9 +226,16 @@ namespace TeamsBusyLight
                 RunElevated("--admin-hosts remove " + webhook.Host);
             }
 
-            SetAutostart(false);
-            File.Delete(AppPaths.StartMenuShortcut);
-            Registry.CurrentUser.DeleteSubKeyTree(AppPaths.UninstallKey, false);
+            // Every step on its own, so one failing does not leave the rest
+            var problems = new List<string>();
+            void Step(Action action)
+            {
+                try { action(); }
+                catch (Exception exception) { problems.Add(exception.Message); }
+            }
+            Step(() => SetAutostart(false));
+            Step(() => DeleteFileForce(AppPaths.StartMenuShortcut));
+            Step(() => Registry.CurrentUser.DeleteSubKeyTree(AppPaths.UninstallKey, false));
             // Out of the program folder: a process cannot delete its current
             // directory (e.g. when started from a PowerShell prompt there)
             Environment.CurrentDirectory = Path.GetTempPath();
@@ -216,10 +250,14 @@ namespace TeamsBusyLight
             }
             foreach (var folder in new[] { AppPaths.ProgramDir, AppPaths.DataDir })
             {
-                try { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
-                catch (Exception exception) { Debug.WriteLine(exception.Message); }
+                Step(() => DeleteFolder(folder));
             }
 
+            if (problems.Count > 0)
+            {
+                Ui.Message(Strings.Format("UninstallIncomplete", string.Join("\n", problems.Distinct())), icon: MessageBoxIcon.Warning);
+                return 1;
+            }
             Ui.Message(Strings.Get("UninstallComplete"));
             return 0;
         }

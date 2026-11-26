@@ -65,7 +65,7 @@ namespace TeamsBusyLight
         // Times of Clock (lastSent is shown with ToLocalTime)
         DateTime lastSent = DateTime.MinValue, lastPoll = DateTime.MinValue, retryAfter = DateTime.MinValue;
         DateTime lastNetworkCheck = DateTime.MinValue, lastUpdateCheck = DateTime.MinValue;
-        bool sending, logMissing, settingsOpen, away, askingNetwork;
+        bool logMissing, settingsOpen, away, askingNetwork;
         // Set by Exit. A dialog open at that moment is closed by the exit (a
         // message box then returns its default button), and the code after it
         // must not act on that.
@@ -386,7 +386,7 @@ namespace TeamsBusyLight
         async void Send()
         {
             var effective = EffectiveStatus;
-            if (string.IsNullOrEmpty(config.WebhookUrl) || away || pausedUntil != null || sending || exiting || effective == null) return;
+            if (string.IsNullOrEmpty(config.WebhookUrl) || away || pausedUntil != null || pendingSend != null || exiting || effective == null) return;
             var webhookUrl = config.WebhookUrl;
             var source = ManualActive ? "manual" : "teams";
             var key = $"{effective}|{activity}|{devices.Camera}|{devices.Microphone}|{source}";
@@ -398,17 +398,16 @@ namespace TeamsBusyLight
             // Unknown values are left out, Home Assistant then keeps the sensor unknown
             if (devices.Camera != null) extra["camera"] = devices.Camera.Value;
             if (devices.Microphone != null) extra["microphone"] = devices.Microphone.Value;
-            sending = true;
             string error;
+            var send = Sender.SendAsync(http, webhookUrl, effective, activity, language, extra);
+            pendingSend = send;
             try
             {
-                pendingSend = Sender.SendAsync(http, webhookUrl, effective, activity, language, extra);
-                error = await pendingSend;
+                error = await send;
             }
             finally
             {
-                sending = false;
-                pendingSend = null;
+                if (pendingSend == send) pendingSend = null;
             }
             // Paused, away or exiting meanwhile, or a new webhook was saved
             // (that one gets the current state right away, see OpenSettings)
@@ -487,7 +486,6 @@ namespace TeamsBusyLight
             // Tracked like a status send: one after a quick resume waits for it
             var offline = Sender.SendAsync(http, webhookUrl, "offline", "not_in_call", null, Sender.OfflineExtra(devices.Camera));
             pendingSend = offline;
-            sending = true;
             try
             {
                 await offline;
@@ -498,11 +496,7 @@ namespace TeamsBusyLight
             }
             finally
             {
-                if (pendingSend == offline)
-                {
-                    pendingSend = null;
-                    sending = false;
-                }
+                if (pendingSend == offline) pendingSend = null;
             }
         }
 
@@ -592,7 +586,10 @@ namespace TeamsBusyLight
             try
             {
                 var result = SettingsForm.ShowDialog(config, Installer.GetAutostart(), diagnostics: () => Diagnostics.Text(this),
-                    checkUpdates: preReleases => CheckUpdatesNow(preReleases));
+                    checkUpdates: preReleases => CheckUpdatesNow(preReleases),
+                    currentStatus: () => pausedUntil != null || away
+                        ? ("offline", "not_in_call")
+                        : ManualActive ? (manual.Status, activity) : ((string, string)?)null);
                 if (result == null || exiting) return;
                 try
                 {
@@ -694,11 +691,15 @@ namespace TeamsBusyLight
             try
             {
                 var json = await updateHttp.GetStringAsync(ReleasesApi(preReleases));
-                result.Latest = ApplyLatestRelease(json, preReleases, true);
+                // A channel chosen in the settings window but not saved yet only
+                // answers there; the menu keeps the offer of the saved channel
+                result.Latest = preReleases == config.PreReleases
+                    ? ApplyLatestRelease(json, preReleases, true)
+                    : (UpdateChecker.SelectNewest(json) ?? throw new InvalidOperationException("no version in the answer of GitHub")).Version;
                 var offer = UpdateChecker.Offer(result.Latest, AppPaths.Version, preReleases);
                 result.Newer = offer != null;
                 result.Downgrade = offer == "downgrade";
-                lastUpdateCheck = Clock;
+                if (preReleases == config.PreReleases) lastUpdateCheck = Clock;
             }
             catch (Exception exception)
             {

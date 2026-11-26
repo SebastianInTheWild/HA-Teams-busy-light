@@ -89,16 +89,16 @@ namespace TeamsBusyLight
         /// <summary>Process names, sorted, without duplicates</summary>
         static string[] ProcessNames(IEnumerable<int> ids)
         {
+            var wanted = new HashSet<int>(ids);
+            if (wanted.Count == 0) return new string[0];
+            // One list of all processes: GetProcessById reads that list for every ID
             var names = new List<string>();
-            foreach (var id in ids)
+            foreach (var process in Process.GetProcesses())
             {
-                try
+                using (process)
                 {
-                    using (var process = Process.GetProcessById(id)) names.Add(process.ProcessName);
-                }
-                catch (Exception)
-                {
-                    // The process has ended in the meantime
+                    // A process that has ended in the meantime is not listed
+                    if (wanted.Contains(process.Id)) names.Add(process.ProcessName);
                 }
             }
             return names.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -140,6 +140,11 @@ namespace TeamsBusyLight
         // --- Camera: sensor activity monitor ------------------------------------
 
         static bool? monitorReady;
+        // A failed start is tried again after a while (e.g. the camera service
+        // was not ready yet right after signing in)
+        const int MonitorRetryMinutes = 5;
+        static DateTime monitorRetryAfter = DateTime.MinValue;
+        static bool monitorFailureLogged;
 
         /// <summary>
         /// Names of the processes streaming from a camera right now (e.g.
@@ -150,17 +155,21 @@ namespace TeamsBusyLight
         /// </summary>
         public static string[] CameraUsers()
         {
-            if (monitorReady == null)
+            if (monitorReady != true && DateTime.UtcNow >= monitorRetryAfter)
             {
                 try
                 {
                     CameraMonitor.Start();
                     monitorReady = true;
+                    if (monitorFailureLogged) Log.Write("Camera: sensor activity monitor available again");
+                    monitorFailureLogged = false;
                 }
                 catch (Exception exception)
                 {
                     monitorReady = false;
-                    Log.Write("Camera: sensor activity monitor not available: " + exception.Message);
+                    monitorRetryAfter = DateTime.UtcNow.AddMinutes(MonitorRetryMinutes);
+                    if (!monitorFailureLogged) Log.Write("Camera: sensor activity monitor not available: " + exception.Message);
+                    monitorFailureLogged = true;
                 }
             }
             return monitorReady == true ? ProcessNames(CameraMonitor.StreamingProcessIds()) : null;

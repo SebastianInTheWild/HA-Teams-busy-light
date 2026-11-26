@@ -52,6 +52,7 @@ namespace TeamsBusyLight
         readonly bool install;
         readonly Func<string> diagnostics;
         readonly Func<bool, Task<UpdateCheckResult>> checkUpdates;
+        Func<(string Status, string Activity)?> currentStatus;
 
         TabControl tabs;
         TabPage generalPage, networksPage;
@@ -66,10 +67,15 @@ namespace TeamsBusyLight
         SettingsResult result;
 
         /// <summary>Shows the window; null when cancelled</summary>
+        /// <param name="currentStatus">
+        /// Status and activity the test sends; null: the one of the Teams log
+        /// (installer). The tray app gives its manual status, or offline while paused.
+        /// </param>
         public static SettingsResult ShowDialog(Settings settings, bool autostart, bool install = false,
-            Func<string> diagnostics = null, Func<bool, Task<UpdateCheckResult>> checkUpdates = null)
+            Func<string> diagnostics = null, Func<bool, Task<UpdateCheckResult>> checkUpdates = null,
+            Func<(string Status, string Activity)?> currentStatus = null)
         {
-            using (var form = new SettingsForm(settings, autostart, install, diagnostics, checkUpdates))
+            using (var form = new SettingsForm(settings, autostart, install, diagnostics, checkUpdates) { currentStatus = currentStatus })
             {
                 form.ShowDialog();
                 return form.result;
@@ -342,7 +348,7 @@ namespace TeamsBusyLight
             AddLabel(page, Strings.Get("TeamsLanguage"), PageMargin, top, PageWidth);
             top += 24;
             languageInput = AddComboBox(page, top,
-                new[] { Strings.Get("TeamsLanguageAuto"), Strings.Get("TeamsLanguageDe"), Strings.Get("TeamsLanguageEn") },
+                Settings.TeamsLanguages.Select(code => Strings.Get("TeamsLanguage" + char.ToUpperInvariant(code[0]) + code.Substring(1))).ToArray(),
                 Math.Max(Array.IndexOf(Settings.TeamsLanguages, settings.TeamsLanguage), 0));
             top = languageInput.Bottom + 16;
 
@@ -479,6 +485,13 @@ namespace TeamsBusyLight
             {
                 var language = Settings.TeamsLanguages[languageInput.SelectedIndex];
                 var current = await Task.Run(() => TeamsMonitor.Read(language));
+                // What the app would send: its manual status, or offline while paused
+                var fromApp = currentStatus?.Invoke();
+                if (fromApp != null)
+                {
+                    current.Status = fromApp.Value.Status;
+                    current.Activity = fromApp.Value.Activity;
+                }
                 string error;
                 using (var client = Sender.NewClient(10))
                 {

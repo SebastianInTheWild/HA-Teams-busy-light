@@ -181,12 +181,25 @@ namespace TeamsBusyLight
                 {
                     foreach (var pattern in state.Value)
                     {
-                        if (Regex.IsMatch(line, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+                        if (Pattern(pattern).IsMatch(line))
                             return (state.Key, table.Key);
                     }
                 }
             }
             return null;
+        }
+
+        // The status patterns, built once (more than the 15 of the Regex cache)
+        static readonly Dictionary<string, Regex> patterns = new Dictionary<string, Regex>();
+
+        static Regex Pattern(string pattern)
+        {
+            if (!patterns.TryGetValue(pattern, out var regex))
+            {
+                regex = new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                patterns[pattern] = regex;
+            }
+            return regex;
         }
 
         static bool Contains(string line, string marker) => line.IndexOf(marker, StringComparison.OrdinalIgnoreCase) >= 0;
