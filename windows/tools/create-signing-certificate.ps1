@@ -3,10 +3,10 @@
     Creates the self-signed code signing certificate for the Windows release
     of Teams Busy Light (run once).
 .DESCRIPTION
-    The release workflow signs a catalog of all files of the Windows download
+    The release workflow signs the file lists of the Windows download
     with this certificate. The update function of the app installs a new
-    version only if the catalog is signed with exactly this certificate (its
-    SHA-256 fingerprint is pinned in Common.ps1). Windows itself does not need
+    version only if its file list is signed with exactly this certificate (its
+    SHA-256 fingerprint is pinned in windows/app/Paths.cs). Windows itself does not need
     to trust the certificate.
 
     Writes the PFX file, its password and a Base64 copy for the GitHub secret
@@ -14,12 +14,16 @@
     certificate from the certificate store again.
 
     Keep the PFX file and its password. A new certificate needs a new
-    fingerprint in Common.ps1; installed versions with the old fingerprint
+    fingerprint in Paths.cs; installed versions with the old fingerprint
     then no longer accept updates and have to be updated by hand once.
 .PARAMETER OutputPath
     Target folder, by default teams-busy-light-signing-windows in the user
     profile. Never inside the repository.
 #>
+# The password is generated here and written to password.txt for the GitHub
+# secret anyway; SecureString only hands it to Export-PfxCertificate
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '',
+    Justification = 'Random password created by this script, stored in plain text for the GitHub secret by design')]
 param(
     [string]$OutputPath = (Join-Path $HOME 'teams-busy-light-signing-windows')
 )
@@ -71,7 +75,7 @@ Write-Output '  signing.pfx          certificate and private key'
 Write-Output '  password.txt         its password'
 Write-Output '  signing.pfx.base64   for the GitHub secret'
 Write-Output ''
-Write-Output "SHA-256 fingerprint (for `$SigningCertificateSha256 in windows/Common.ps1):"
+Write-Output "SHA-256 fingerprint (for SigningCertificateSha256 in windows/app/Paths.cs):"
 Write-Output "  $Fingerprint"
 Write-Output ''
 Write-Output 'Set the GitHub secrets (in the repository folder):'

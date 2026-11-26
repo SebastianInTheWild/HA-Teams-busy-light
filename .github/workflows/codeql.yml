@@ -29,7 +29,7 @@ concurrency:
 jobs:
   analyze:
     name: CodeQL (${{ matrix.language }})
-    runs-on: ${{ matrix.language == 'swift' && 'macos-latest' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.language == 'swift' && 'macos-latest' || matrix.language == 'csharp' && 'windows-latest' || 'ubuntu-latest' }}
     permissions:
       contents: read
       security-events: write
@@ -41,9 +41,9 @@ jobs:
           # The integration
           - language: python
             build-mode: none
-          # The Windows launcher (compiled by the installer)
+          # The Windows app; CodeQL watches the build
           - language: csharp
-            build-mode: none
+            build-mode: manual
           # The macOS app; CodeQL watches the build
           - language: swift
             build-mode: manual
@@ -60,9 +60,13 @@ jobs:
           queries: security-extended
 
       - name: Build the macOS app
-        if: matrix.build-mode == 'manual'
+        if: matrix.language == 'swift'
         # Signed ad hoc: only the code matters here
         run: bash macos/build.sh
+
+      - name: Build the Windows app
+        if: matrix.language == 'csharp'
+        run: dotnet build windows/app --configuration Release --nologo
 
       - uses: github/codeql-action/analyze@v4
         with:

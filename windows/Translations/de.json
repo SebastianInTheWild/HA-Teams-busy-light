@@ -108,7 +108,6 @@
     "InvalidWebhook": "Gib eine gültige HTTP- oder HTTPS-Webhook-URL ein, die auf /api/webhook/<id> endet.",
     "InvalidNetwork": "„{0}“ ist kein gültiges Netz. Gib Netze wie 192.168.1.0/24 ein.",
 
-    "AlreadyRunning": "Teams Busy Light läuft bereits.",
     "LogStarted": "Teams Busy Light gestartet auf {0} für {1}",
     "LogStatus": "Status: {0}, Aktivität: {1}",
     "LogLanguage": "Teams-Sprache erkannt: {0}",
@@ -139,27 +138,20 @@
     "InstallInfo": "Teams Busy Light läuft im Infobereich der Taskleiste für den angemeldeten Windows-Benutzer und sendet deinen Teams-Status an Home Assistant. Administratorrechte sind nicht nötig. Jeder Windows-Benutzer installiert es für sich selbst, mit eigenem Integrationseintrag und eigener Webhook-URL.",
     "InstallHosts": "Home Assistant in die Windows-Hosts-Datei eintragen (benötigt Administratorrechte)",
     "InstallHostsHint": "Nur nötig, wenn Home Assistant nicht über seinen Namen erreichbar ist, z. B. bei aktivem Firmen-VPN.",
-    "InstallLegacy": "Der bisherige Windows-Dienst „Microsoft Teams Status Monitor“ wird entfernt (benötigt Administratorrechte). Weitere Windows-Benutzer dieses PCs müssen Teams Busy Light danach selbst installieren.",
     "Install": "Installieren",
     "InstallComplete": "Teams Busy Light ist installiert und läuft. Du findest es im Infobereich der Taskleiste (ggf. hinter dem Pfeil) und im Startmenü.",
     "CompleteTitle": "Installation abgeschlossen",
     "AdminCancelled": "Die Schritte mit Administratorrechten wurden nicht ausgeführt: {0}",
     "AdminHosts": "Hosts-Eintrag",
-    "AdminLegacy": "Entfernen des bisherigen Windows-Dienstes",
 
-    "Elevating": "Neustart mit Administratorrechten...",
     "DnsFailed": "IPv4 für {0} konnte mit den DNS-Servern aktiver LAN-/WLAN-Adapter nicht aufgelöst werden.",
     "HostsFailed": "Hosts-Eintrag für '{0}' konnte nicht aktualisiert werden: {1}",
     "HostsAdded": "Hosts-Eintrag hinzugefügt: {0} {1}",
     "HostsUpdated": "Hosts-Eintrag aktualisiert: {0} {1}",
     "HostsRemoved": "Hosts-Einträge von Teams Busy Light entfernt.",
-    "LegacyRemoved": "Der bisherige Windows-Dienst und C:\\Scripts\\TeamsStatus wurden entfernt.",
-    "ServicePathMismatch": "Der Dienst '{0}' verwendet offenbar nicht die NSSM-Datei der bisherigen Installation. Er wurde nicht entfernt. Dienstpfad: {1}",
-    "ServiceRemovalFailed": "Der Dienst '{0}' konnte nicht entfernt werden (Exitcode {1}).",
-    "ServiceStillExists": "Der Dienst '{0}' ist nach dem Entfernen weiterhin vorhanden. Die installierten Dateien wurden beibehalten.",
 
     "ConfirmUninstall": "Teams Busy Light für diesen Windows-Benutzer entfernen? Der Integrationseintrag in Home Assistant wird nicht geändert.",
     "UninstallHosts": "Auch die Einträge von Teams Busy Light aus der Windows-Hosts-Datei entfernen (benötigt Administratorrechte)?",
-    "UninstallLegacy": "Der bisherige Windows-Dienst „Microsoft Teams Status Monitor“ ist noch installiert. Soll er ebenfalls entfernt werden (benötigt Administratorrechte)?",
+    "UninstallIncomplete": "Teams Busy Light wurde entfernt, aber nicht alles ließ sich löschen:\n{0}\n\nLösche den Rest von Hand (Ordner TeamsBusyLight unter %LOCALAPPDATA% und %LOCALAPPDATA%\\Programs).",
     "UninstallComplete": "Teams Busy Light wurde entfernt. Integrationseinträge in Home Assistant wurden nicht geändert."
 }

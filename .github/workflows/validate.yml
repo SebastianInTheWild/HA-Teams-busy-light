@@ -86,19 +86,22 @@ jobs:
       - name: Analyze
         shell: pwsh
         run: |
-          $results = Invoke-ScriptAnalyzer -Path ./windows -Severity Error
+          $results = Invoke-ScriptAnalyzer -Path ./windows -Recurse -Severity Error
           $results | Format-Table -AutoSize
           if ($results) { exit 1 }
 
-  windows-download:
-    name: Build Windows download
+  windows-app:
+    name: Windows app (tests and download)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Build
+      - name: Test
+        # .NET Framework 4.8 app; the .NET SDK of the runner builds it
+        run: dotnet test windows/tests --configuration Release --nologo
+      - name: Build the download
         # Unsigned: the signing secrets are only available to the release
         # (environment "release" with approval); the release build checks
-        # the certificate against Common.ps1 before anything is uploaded
+        # the certificate against Paths.cs before anything is uploaded
         shell: powershell
         run: ./windows/tools/build-release.ps1 -Version 0.0.0 -OutputPath dist
 
