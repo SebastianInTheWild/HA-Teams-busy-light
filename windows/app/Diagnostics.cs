@@ -64,7 +64,7 @@ namespace TeamsBusyLight
                 $"Current networks: {string.Join(", ", HomeNetwork.Current())}",
                 $"In home network:  {YesNo(!state.Away)}",
                 $"Paused:           {pause}",
-                $"Last sent:        {(state.LastSent != DateTime.MinValue ? state.LastSent.ToString("s") : "-")}",
+                $"Last sent:        {(state.LastSent != DateTime.MinValue ? state.LastSent.ToLocalTime().ToString("s") : "-")}",
                 $"Last error:       {state.SendError ?? "-"}",
                 $"Intervals:        check {config.PollSeconds} s, keep-alive {config.HeartbeatSeconds} s",
                 $"Autostart:        {YesNo(Installer.GetAutostart())}",

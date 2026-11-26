@@ -17,6 +17,10 @@ param(
     [switch]$Quiet
 )
 
+# A start that fails ends the script with exit code 1 (otherwise $Process
+# stays $null and "exit $Process.ExitCode" reports 0)
+$ErrorActionPreference = 'Stop'
+
 $Exe = Join-Path $PSScriptRoot 'TeamsBusyLight.exe'
 $Arguments = if ($Quiet) { '--install --quiet' } else { '--install' }
 # Not -Wait: it would also wait for the tray app the installer starts

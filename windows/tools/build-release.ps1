@@ -93,8 +93,9 @@ function Get-ManifestText {
     param([string]$Folder)
 
     $Paths = [System.Collections.Generic.List[string]]::new()
-    # -Name: relative paths (FullName may use the long form of a short 8.3 path)
-    foreach ($Name in Get-ChildItem -LiteralPath $Folder -Recurse -File -Name) {
+    # -Name: relative paths (FullName may use the long form of a short 8.3 path);
+    # -Force: hidden files too, as Directory.GetFiles in the app lists them
+    foreach ($Name in Get-ChildItem -LiteralPath $Folder -Recurse -File -Force -Name) {
         $Relative = $Name.Replace('\', '/')
         if ($Relative -ne $ManifestName -and $Relative -ne $CatalogName) {
             $Paths.Add($Relative)
@@ -167,6 +168,16 @@ if ($PfxBase64) {
     $Result = Test-FileCatalog -CatalogFilePath $CatalogPath -Path $StageDir
     if ($Result -ne 'Valid') {
         throw "Check of the signed catalog failed: $Result"
+    }
+    # And like the update function of the PowerShell versions checks it
+    # (Test-TeamsReleaseSignature of 1.7.x): valid signature, one signer, the
+    # pinned certificate. Otherwise they could not update to this version.
+    $CatalogCheck = New-Object System.Security.Cryptography.Pkcs.SignedCms
+    $CatalogCheck.Decode([System.IO.File]::ReadAllBytes($CatalogPath))
+    $CatalogCheck.CheckSignature($true)
+    if ($CatalogCheck.SignerInfos.Count -ne 1 -or -not $CatalogCheck.SignerInfos[0].Certificate -or
+        (Get-CertificateSha256 $CatalogCheck.SignerInfos[0].Certificate) -ne $Fingerprint) {
+        throw 'Check of the signed catalog failed: not signed by exactly the signing certificate.'
     }
     Write-Output 'Catalog signed and checked.'
 }

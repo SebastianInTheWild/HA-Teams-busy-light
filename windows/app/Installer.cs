@@ -45,18 +45,39 @@ namespace TeamsBusyLight
 
             // Replace the program file of a running instance
             StopRunning();
-            CopyProgram();
-            settings.Save();
-            SetAutostart(autostart);
-            CreateShortcut();
-            WriteUninstallEntry();
+            try
+            {
+                CopyProgram();
+                settings.Save();
+                SetAutostart(autostart);
+                CreateShortcut();
+                WriteUninstallEntry();
+            }
+            catch (Exception exception)
+            {
+                // The running app was stopped above; after an update from the
+                // app (--quiet) nothing else reports this any more. Show it and
+                // start the installed program again (the previous version if
+                // its file was not replaced).
+                Log.Write("Installing failed: " + exception);
+                try
+                {
+                    if (File.Exists(AppPaths.ExePath)) StartInstalled();
+                }
+                catch (Exception startError)
+                {
+                    Log.Write($"Cannot start {AppPaths.ExePath}: {startError.Message}");
+                }
+                Ui.Message(exception.Message, icon: MessageBoxIcon.Error, caption: Strings.Get("InstallTitle"));
+                return 1;
+            }
 
             if (addHosts && !RunElevated("--admin-hosts add " + new Uri(settings.WebhookUrl).Host))
             {
                 Ui.Message(Strings.Format("AdminCancelled", Strings.Get("AdminHosts")), icon: MessageBoxIcon.Warning, caption: Strings.Get("InstallTitle"));
             }
 
-            Process.Start(new ProcessStartInfo(AppPaths.ExePath) { UseShellExecute = false, WorkingDirectory = AppPaths.ProgramDir });
+            StartInstalled();
             if (quiet)
             {
                 Log.Write("Updated to version " + AppPaths.Version);
@@ -73,18 +94,20 @@ namespace TeamsBusyLight
         static void CopyProgram()
         {
             var source = Path.GetFullPath(AppPaths.CurrentExe);
-            var running = string.Equals(source, Path.GetFullPath(AppPaths.ExePath), StringComparison.OrdinalIgnoreCase);
+            var target = Path.GetFullPath(AppPaths.ExePath);
             Directory.CreateDirectory(AppPaths.ProgramDir);
             foreach (var entry in new DirectoryInfo(AppPaths.ProgramDir).GetFileSystemInfos())
             {
-                if (running && string.Equals(entry.FullName, source, StringComparison.OrdinalIgnoreCase)) continue;
+                // The program file is overwritten below (or is this one): if
+                // copying fails, the previous version is still there
+                if (string.Equals(entry.FullName, target, StringComparison.OrdinalIgnoreCase)) continue;
                 Retry(() =>
                 {
                     if (entry is DirectoryInfo folder) folder.Delete(true);
                     else entry.Delete();
                 });
             }
-            if (!running)
+            if (!string.Equals(source, target, StringComparison.OrdinalIgnoreCase))
             {
                 Retry(() => File.Copy(source, AppPaths.ExePath, true));
                 // Not from the internet any more: no SmartScreen prompt at every start
@@ -107,6 +130,12 @@ namespace TeamsBusyLight
                     Thread.Sleep(500);
                 }
             }
+        }
+
+        /// <summary>Starts the installed program (the tray app)</summary>
+        static void StartInstalled()
+        {
+            using (Process.Start(new ProcessStartInfo(AppPaths.ExePath) { UseShellExecute = false, WorkingDirectory = AppPaths.ProgramDir })) { }
         }
 
         static void CreateShortcut()
@@ -173,6 +202,9 @@ namespace TeamsBusyLight
             SetAutostart(false);
             File.Delete(AppPaths.StartMenuShortcut);
             Registry.CurrentUser.DeleteSubKeyTree(AppPaths.UninstallKey, false);
+            // Out of the program folder: a process cannot delete its current
+            // directory (e.g. when started from a PowerShell prompt there)
+            Environment.CurrentDirectory = Path.GetTempPath();
             // The running file cannot be deleted, but moved out of the folder
             // (see Updater.UninstallFolder); Updater.CleanUp removes it on the
             // next installation, and Windows cleans up the temp folder by itself
@@ -233,7 +265,10 @@ namespace TeamsBusyLight
             return true;
         }
 
-        /// <summary>Stops a running instance (also of the PowerShell versions) and waits until it has exited</summary>
+        /// <summary>
+        /// Stops a running instance (also of the PowerShell versions) and waits
+        /// until it has exited. Throws if it is still running after 15 s.
+        /// </summary>
         public static void StopRunning()
         {
             if (!SignalInstance(AppPaths.ExitEventName)) return;
@@ -242,13 +277,25 @@ namespace TeamsBusyLight
             {
                 try
                 {
-                    if (mutex.WaitOne(15000)) mutex.ReleaseMutex();
+                    if (mutex.WaitOne(15000))
+                    {
+                        mutex.ReleaseMutex();
+                        return;
+                    }
                 }
                 catch (AbandonedMutexException)
                 {
                     mutex.ReleaseMutex();
+                    return;
                 }
             }
+            // Still running: take the request back, so it does not exit later
+            // with nothing started in its place (the update reports the failure)
+            if (EventWaitHandle.TryOpenExisting(AppPaths.ExitEventName, out var exitEvent))
+            {
+                using (exitEvent) exitEvent.Reset();
+            }
+            throw new InvalidOperationException("Teams Busy Light did not stop. Exit it in the tray menu and try again.");
         }
     }
 }

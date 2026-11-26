@@ -93,8 +93,6 @@ namespace TeamsBusyLight
             TopMost = true;
             BackColor = Color.FromArgb(245, 247, 250);
             Font = Ui.NewFont(9);
-            AutoScaleMode = AutoScaleMode.Dpi;
-            AutoScaleDimensions = new SizeF(96F, 96F);
             Icon = Ui.AppIcon;
 
             BuildHeader();
@@ -120,6 +118,12 @@ namespace TeamsBusyLight
             // is not known yet before the window is shown)
             tabs.Height = heights.Max() + 40;
             BuildButtons(tabs.Bottom + 20);
+            // Only now, with all controls placed in 96 dpi units. Set before,
+            // WinForms scales every control while it is added, and the next
+            // position taken from its Bottom is scaled again: at 125 % display
+            // scaling the Install/Save button ended up below the screen.
+            AutoScaleMode = AutoScaleMode.Dpi;
+            AutoScaleDimensions = new SizeF(96F, 96F);
             ResumeLayout();
 
             Shown += (sender, args) =>

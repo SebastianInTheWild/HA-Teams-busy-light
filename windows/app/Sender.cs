@@ -12,8 +12,11 @@ namespace TeamsBusyLight
     {
         static Sender()
         {
-            // The .NET Framework may not offer TLS 1.2 by default
-            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+            // An app for .NET Framework 4.7 and newer uses the TLS versions of
+            // Windows (SystemDefault = 0, also TLS 1.3), and "|= Tls12" would
+            // turn that into TLS 1.2 only. Only add TLS 1.2 to an explicit list.
+            if (ServicePointManager.SecurityProtocol != SecurityProtocolType.SystemDefault)
+                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
         }
 
         public static HttpClient NewClient(int timeoutSeconds)
@@ -43,14 +46,17 @@ namespace TeamsBusyLight
             return Json.Serialize(body);
         }
 
-        /// <summary>Sends once; returns null or the reason it failed</summary>
+        /// <summary>
+        /// Sends once; returns null or the reason it failed. Completes without
+        /// the UI thread, so the tray app can wait for it when exiting.
+        /// </summary>
         public static async Task<string> SendAsync(HttpClient client, string webhookUrl, string status, string activity,
             string language = null, IDictionary<string, object> extra = null)
         {
             try
             {
                 using (var content = new StringContent(Body(status, activity, language, extra), Encoding.UTF8, "application/json"))
-                using (var response = await client.PostAsync(webhookUrl, content).ConfigureAwait(true))
+                using (var response = await client.PostAsync(webhookUrl, content).ConfigureAwait(false))
                 {
                     return response.IsSuccessStatusCode ? null : $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}";
                 }

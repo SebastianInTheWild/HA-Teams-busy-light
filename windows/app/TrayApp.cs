@@ -62,11 +62,28 @@ namespace TeamsBusyLight
         ManualStatus manual = Settings.LoadManualStatus();
         string language;
         string sentKey, loggedStatus, sendError;
+        // Times of Clock (lastSent is shown with ToLocalTime)
         DateTime lastSent = DateTime.MinValue, lastPoll = DateTime.MinValue, retryAfter = DateTime.MinValue;
         DateTime lastNetworkCheck = DateTime.MinValue, lastUpdateCheck = DateTime.MinValue;
         bool sending, logMissing, settingsOpen, away, askingNetwork;
-        // The send on its way, so "offline" for a pause is sent after it
+        // Set by Exit. A dialog open at that moment is closed by the exit (a
+        // message box then returns its default button), and the code after it
+        // must not act on that.
+        bool exiting;
+        // The send on its way (a status, or "offline" for a pause), so the next one is sent after it
         Task<string> pendingSend;
+
+        // Intervals are measured with a clock that does not jump: DateTime.Now
+        // goes back an hour when daylight saving time ends (and with a clock
+        // correction), which stopped polling and keep-alive for that long. UTC
+        // at the start plus the time since, so it can also be shown.
+        static readonly DateTime ClockStart = DateTime.UtcNow;
+        static readonly Stopwatch ClockWatch = Stopwatch.StartNew();
+        static DateTime Clock => ClockStart + ClockWatch.Elapsed;
+
+        // A failed daily update check is repeated after this time instead of
+        // after 24 hours (e.g. no network yet right after signing in)
+        const int UpdateRetryMinutes = 30;
         DateTime? pausedUntil = Settings.LoadPause();
 
         // Updates: the offered version, its download (null = only the release page)
@@ -117,7 +134,7 @@ namespace TeamsBusyLight
             settingsItem.Font = new Font(settingsItem.Font, FontStyle.Bold);
             var logItem = new ToolStripMenuItem(Strings.Get("MenuOpenLog"), null, (sender, args) =>
             {
-                if (System.IO.File.Exists(AppPaths.LogPath)) Process.Start("notepad.exe", $"\"{AppPaths.LogPath}\"");
+                if (System.IO.File.Exists(AppPaths.LogPath)) Open("notepad.exe", $"\"{AppPaths.LogPath}\"");
             });
             var checkUpdatesItem = new ToolStripMenuItem(Strings.Get("MenuCheckUpdates"), null, async (sender, args) => await CheckUpdatesFromMenu());
             updateItem = new ToolStripMenuItem { Visible = false };
@@ -184,6 +201,23 @@ namespace TeamsBusyLight
 
         static string FormatTime(DateTime time) => time.Date == DateTime.Today ? time.ToString("t") : time.ToString("g");
 
+        /// <summary>
+        /// Opens a program or web page. A failure (e.g. Notepad removed, no
+        /// browser) is shown; unhandled it would end in the WinForms error dialog.
+        /// </summary>
+        static void Open(string fileName, string arguments = null)
+        {
+            try
+            {
+                using (arguments == null ? Process.Start(fileName) : Process.Start(fileName, arguments)) { }
+            }
+            catch (Exception exception)
+            {
+                Log.Write($"Cannot open {fileName}: {exception.Message}");
+                Ui.Message(exception.Message, icon: MessageBoxIcon.Warning);
+            }
+        }
+
         bool ManualActive => manual != null && manual.IsActive;
 
         /// <summary>Status that is sent: the one set from the menu, otherwise the Teams status</summary>
@@ -220,7 +254,7 @@ namespace TeamsBusyLight
                 connectionItem.Text = pausedUntil == DateTime.MaxValue ? Strings.Get("MenuPausedAlways") : Strings.Format("MenuPausedUntil", FormatTime(pausedUntil.Value));
             else if (away) connectionItem.Text = Strings.Get("MenuAway");
             else if (sendError != null) connectionItem.Text = Strings.Get("MenuSendFailed");
-            else connectionItem.Text = Strings.Format("MenuSentAt", lastSent != DateTime.MinValue ? lastSent.ToString("T") : "-");
+            else connectionItem.Text = Strings.Format("MenuSentAt", lastSent != DateTime.MinValue ? lastSent.ToLocalTime().ToString("T") : "-");
             resumeItem.Visible = pausedUntil != null;
 
             var colorKey = effective != null && StatusColorKey.TryGetValue(effective, out var key) ? key : "none";
@@ -239,6 +273,8 @@ namespace TeamsBusyLight
 
         void Tick()
         {
+            // A tick can still come from a dialog's message loop after Exit
+            if (exiting) return;
             try
             {
                 if (exitEvent.WaitOne(0))
@@ -250,9 +286,9 @@ namespace TeamsBusyLight
                 if (!askingNetwork && showSettingsEvent.WaitOne(0)) OpenSettings();
                 if (pausedUntil != null && pausedUntil != DateTime.MaxValue && DateTime.Now >= pausedUntil) Resume();
                 if (manual != null && !manual.IsActive) ClearManual();
-                if ((DateTime.Now - lastPoll).TotalSeconds >= config.PollSeconds)
+                if ((Clock - lastPoll).TotalSeconds >= config.PollSeconds)
                 {
-                    lastPoll = DateTime.Now;
+                    lastPoll = Clock;
                     UpdateState();
                 }
                 if (UpdateNetworkState()) AskForNewNetwork();
@@ -350,10 +386,11 @@ namespace TeamsBusyLight
         async void Send()
         {
             var effective = EffectiveStatus;
-            if (string.IsNullOrEmpty(config.WebhookUrl) || away || pausedUntil != null || sending || effective == null) return;
+            if (string.IsNullOrEmpty(config.WebhookUrl) || away || pausedUntil != null || sending || exiting || effective == null) return;
+            var webhookUrl = config.WebhookUrl;
             var source = ManualActive ? "manual" : "teams";
             var key = $"{effective}|{activity}|{devices.Camera}|{devices.Microphone}|{source}";
-            var now = DateTime.Now;
+            var now = Clock;
             var due = (now - lastSent).TotalSeconds >= config.HeartbeatSeconds;
             if ((key == sentKey && !due) || now < retryAfter) return;
 
@@ -365,7 +402,7 @@ namespace TeamsBusyLight
             string error;
             try
             {
-                pendingSend = Sender.SendAsync(http, config.WebhookUrl, effective, activity, language, extra);
+                pendingSend = Sender.SendAsync(http, webhookUrl, effective, activity, language, extra);
                 error = await pendingSend;
             }
             finally
@@ -373,19 +410,21 @@ namespace TeamsBusyLight
                 sending = false;
                 pendingSend = null;
             }
-            if (away || pausedUntil != null) return;
+            // Paused, away or exiting meanwhile, or a new webhook was saved
+            // (that one gets the current state right away, see OpenSettings)
+            if (away || pausedUntil != null || exiting || webhookUrl != config.WebhookUrl) return;
             if (error != null)
             {
                 if (error != sendError) Log.Write(Strings.Format("LogSendFailed", error));
                 sendError = error;
-                retryAfter = DateTime.Now.AddSeconds(10);
+                retryAfter = Clock.AddSeconds(10);
             }
             else
             {
                 if (sendError != null) Log.Write(Strings.Get("LogSendOk"));
                 sendError = null;
                 sentKey = key;
-                lastSent = DateTime.Now;
+                lastSent = Clock;
             }
             UpdateTrayDisplay();
         }
@@ -445,13 +484,25 @@ namespace TeamsBusyLight
             }
             // Resumed in the meantime: the current status is sent instead
             if (pausedUntil == null) return;
+            // Tracked like a status send: one after a quick resume waits for it
+            var offline = Sender.SendAsync(http, webhookUrl, "offline", "not_in_call", null, Sender.OfflineExtra(devices.Camera));
+            pendingSend = offline;
+            sending = true;
             try
             {
-                await Sender.SendAsync(http, webhookUrl, "offline", "not_in_call", null, Sender.OfflineExtra(devices.Camera));
+                await offline;
             }
             catch (Exception exception)
             {
                 Log.Write(exception.Message);
+            }
+            finally
+            {
+                if (pendingSend == offline)
+                {
+                    pendingSend = null;
+                    sending = false;
+                }
             }
         }
 
@@ -473,8 +524,8 @@ namespace TeamsBusyLight
         /// </summary>
         bool UpdateNetworkState()
         {
-            if ((DateTime.Now - lastNetworkCheck).TotalSeconds < 5) return false;
-            lastNetworkCheck = DateTime.Now;
+            if ((Clock - lastNetworkCheck).TotalSeconds < 5) return false;
+            lastNetworkCheck = Clock;
             var isAway = !HomeNetwork.IsHome(config.HomeNetworks);
             if (isAway == away) return true;
             away = isAway;
@@ -498,13 +549,16 @@ namespace TeamsBusyLight
         /// </summary>
         void AskForNewNetwork()
         {
-            if (!away || !config.AskForNewNetworks || askingNetwork || settingsOpen) return;
+            if (!away || !config.AskForNewNetworks || askingNetwork || settingsOpen || exiting) return;
             var network = HomeNetwork.New(config.HomeNetworks, config.IgnoredNetworks).FirstOrDefault();
             if (network == null) return;
             askingNetwork = true;
             try
             {
-                switch (Ui.Message(Strings.Format("NewNetworkText", network), MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question))
+                var answer = Ui.Message(Strings.Format("NewNetworkText", network), MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                // Closed by Exit, not answered: the box then returns its default button (Yes)
+                if (exiting) return;
+                switch (answer)
                 {
                     case DialogResult.Yes:
                         config.HomeNetworks = HomeNetwork.Add(config.HomeNetworks, new[] { network });
@@ -533,22 +587,42 @@ namespace TeamsBusyLight
         void OpenSettings()
         {
             // Not while the network question is open: saving would drop its answer
-            if (settingsOpen || askingNetwork) return;
+            if (settingsOpen || askingNetwork || exiting) return;
             settingsOpen = true;
             try
             {
                 var result = SettingsForm.ShowDialog(config, Installer.GetAutostart(), diagnostics: () => Diagnostics.Text(this),
                     checkUpdates: preReleases => CheckUpdatesNow(preReleases));
-                if (result == null) return;
-                result.Settings.Save();
-                Installer.SetAutostart(result.Autostart);
-                config = Settings.Load();
+                if (result == null || exiting) return;
+                try
+                {
+                    result.Settings.Save();
+                }
+                catch (Exception exception)
+                {
+                    // e.g. the file is locked; the settings in use stay as they were
+                    Log.Write("Cannot save the settings: " + exception.Message);
+                    Ui.Message(exception.Message, icon: MessageBoxIcon.Warning);
+                    return;
+                }
+                // The saved settings themselves: reading the file again gives the
+                // defaults on a read error, and a later save would keep them
+                config = result.Settings;
                 // Send right away to the (possibly new) webhook
                 SendNow();
                 sendError = null;
                 lastPoll = DateTime.MinValue;
                 lastNetworkCheck = DateTime.MinValue;
                 UpdateTrayDisplay();
+                try
+                {
+                    Installer.SetAutostart(result.Autostart);
+                }
+                catch (Exception exception)
+                {
+                    Log.Write("Cannot change the autostart: " + exception.Message);
+                    Ui.Message(exception.Message, icon: MessageBoxIcon.Warning);
+                }
             }
             finally
             {
@@ -624,7 +698,7 @@ namespace TeamsBusyLight
                 var offer = UpdateChecker.Offer(result.Latest, AppPaths.Version, preReleases);
                 result.Newer = offer != null;
                 result.Downgrade = offer == "downgrade";
-                lastUpdateCheck = DateTime.Now;
+                lastUpdateCheck = Clock;
             }
             catch (Exception exception)
             {
@@ -646,7 +720,7 @@ namespace TeamsBusyLight
         /// <summary>The daily check</summary>
         async void CheckForUpdates()
         {
-            if (updateChecking) return;
+            if (updateChecking || exiting) return;
             var preReleases = config.PreReleases;
             if (!config.CheckForUpdates || AppPaths.Version == "0.0.0")
             {
@@ -662,8 +736,8 @@ namespace TeamsBusyLight
                 return;
             }
             // Checks again right away when the channel was changed
-            if ((DateTime.Now - lastUpdateCheck).TotalHours < 24 && updatePreReleases == preReleases) return;
-            lastUpdateCheck = DateTime.Now;
+            if ((Clock - lastUpdateCheck).TotalHours < 24 && updatePreReleases == preReleases) return;
+            lastUpdateCheck = Clock;
             updatePreReleases = preReleases;
             updateChecking = true;
             try
@@ -673,6 +747,8 @@ namespace TeamsBusyLight
             catch (Exception exception)
             {
                 Log.Write("Update check failed: " + exception.GetBaseException().Message);
+                // Again in UpdateRetryMinutes, not only in 24 hours
+                lastUpdateCheck = Clock.AddHours(-24).AddMinutes(UpdateRetryMinutes);
             }
             finally
             {
@@ -685,10 +761,11 @@ namespace TeamsBusyLight
             if (updateVersion == null || updating) return;
             if (updateAssetUrl == null)
             {
-                Process.Start(updatePage ?? AppPaths.ReleasesPage);
+                Open(updatePage ?? AppPaths.ReleasesPage);
                 return;
             }
-            if (Ui.Message(Strings.Format("UpdateConfirm", updateVersion), MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            // Closed by Exit, not answered: the box then returns its default button (Yes)
+            if (Ui.Message(Strings.Format("UpdateConfirm", updateVersion), MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes || exiting) return;
             Log.Write($"Downloading update {updateVersion}");
             updating = true;
             SetUpdateItem();
@@ -748,6 +825,8 @@ namespace TeamsBusyLight
 
         void Exit()
         {
+            if (exiting) return;
+            exiting = true;
             timer.Stop();
             try
             {
@@ -755,6 +834,9 @@ namespace TeamsBusyLight
                 // not when stopped for an update, the new version sends right after starting
                 if (!string.IsNullOrEmpty(config.WebhookUrl) && pausedUntil == null && !updating && HomeNetwork.IsHome(config.HomeNetworks))
                 {
+                    // A send on its way first, so it cannot arrive after "offline"
+                    // (SendAsync completes without the UI thread)
+                    pendingSend?.Wait(TimeSpan.FromSeconds(3));
                     Sender.Send(config.WebhookUrl, "offline", "not_in_call", Sender.OfflineExtra(devices.Camera), 3);
                 }
             }
