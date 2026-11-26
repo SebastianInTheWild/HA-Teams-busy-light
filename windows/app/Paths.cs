@@ -10,7 +10,7 @@ namespace TeamsBusyLight
     ///   program   %LOCALAPPDATA%\Programs\TeamsBusyLight\TeamsBusyLight.exe
     ///   settings  %LOCALAPPDATA%\TeamsBusyLight\settings.json
     ///   log       %LOCALAPPDATA%\TeamsBusyLight\TeamsBusyLight.log
-    /// The same as in the PowerShell versions before 1.8.0, so their settings
+    /// The same as in the PowerShell versions before 2.0.0, so their settings
     /// are kept and autostart and Start menu entry point to the same file.
     /// </summary>
     internal static class AppPaths
@@ -52,11 +52,11 @@ namespace TeamsBusyLight
         // Empty = no update button, only the hint.
         public const string ReleaseManifestName = "TeamsBusyLight.sha256.p7m";
         // Signed catalog of the same files, for the PowerShell versions before
-        // 1.8.0, which update themselves to this version
+        // 2.0.0, which update themselves to this version
         public const string ReleaseCatalogName = "TeamsBusyLight.cat";
         public const string SigningCertificateSha256 = "C490C7763D8BB1C4098F00D45BB87C7BC45A41282686F89D32C941EBDBABF48F";
 
-        /// <summary>Version of this build, e.g. "1.8.0" or "1.8.0-beta.1"; "0.0.0" in a development build</summary>
+        /// <summary>Version of this build, e.g. "2.0.0" or "2.0.0-beta.1"; "0.0.0" in a development build</summary>
         public static readonly string Version =
             typeof(AppPaths).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
 

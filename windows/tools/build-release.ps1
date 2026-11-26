@@ -5,7 +5,7 @@
     Builds TeamsBusyLight.exe (windows/app, .NET Framework 4.8) with the
     version passed in and puts it into <OutputPath>\TeamsBusyLight-Windows
     together with README.md, version.txt and Install.ps1 (only for the update
-    from the PowerShell versions before 1.8.0).
+    from the PowerShell versions before 2.0.0).
 
     With a signing certificate it then writes two signed lists of the files:
     - TeamsBusyLight.sha256.p7m: the SHA-256 hashes of all files, signed as
@@ -13,7 +13,7 @@
       downloads whose list is signed with the certificate pinned in Paths.cs
       and whose files match it.
     - TeamsBusyLight.cat: a catalog of all files with a timestamp, checked by
-      the update function of the PowerShell versions before 1.8.0, so they
+      the update function of the PowerShell versions before 2.0.0, so they
       can update themselves to this version.
 
     Without a certificate the download is built unsigned (the app then only
@@ -144,7 +144,7 @@ if ($PfxBase64) {
     }
     Write-Output 'File list signed and checked.'
 
-    # Catalog for the PowerShell versions before 1.8.0 (over all files, the list included)
+    # Catalog for the PowerShell versions before 2.0.0 (over all files, the list included)
     $CatalogPath = Join-Path $StageDir $CatalogName
     Import-Module -Name (Join-Path $PSHOME 'Modules\Microsoft.PowerShell.Security') -ErrorAction Stop
     New-FileCatalog -Path $StageDir -CatalogFilePath $CatalogPath -CatalogVersion 2.0 | Out-Null

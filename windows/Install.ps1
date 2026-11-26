@@ -3,7 +3,7 @@
     Update from the PowerShell versions of Teams Busy Light to the Windows
     program. Not needed for a new installation.
 .DESCRIPTION
-    From version 1.8.0 Teams Busy Light is a Windows program
+    From version 2.0.0 Teams Busy Light is a Windows program
     (TeamsBusyLight.exe) that installs itself: start it to install or update.
 
     This script is only in the download because the update function of the

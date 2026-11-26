@@ -175,7 +175,7 @@ from NuGet):
 ```powershell
 dotnet test windows/tests                                  # tests of the logic
 dotnet build windows/app -c Release                        # windows/app/bin/Release/net48/TeamsBusyLight.exe
-./windows/tools/build-release.ps1 -Version 1.8.0 -OutputPath dist   # the download, as in the release
+./windows/tools/build-release.ps1 -Version 2.0.0 -OutputPath dist   # the download, as in the release
 ```
 
 The icon embedded in the program (`app/app-icon.ico`) holds uncompressed images, made from

@@ -1,6 +1,8 @@
 # Changelog
 
-## 1.8.0
+## 2.0.0
+
+Major version: the Windows app was rebuilt from scratch as a C# program. Settings are kept, and versions 1.7.x update themselves to it.
 
 * Windows: the app is now a Windows program in C# (`TeamsBusyLight.exe`, .NET Framework 4.8 of Windows 10/11) instead of PowerShell scripts, like the Swift app on macOS. It starts no PowerShell any more: security software (EDR) reported the hidden PowerShell with `-ExecutionPolicy Bypass`, started by a program compiled on the PC, as suspicious. Same functions, settings window, tray menu, settings files and log
 * Windows: install by double-clicking `TeamsBusyLight.exe` of the download (no `Install.cmd`); uninstall under Installed apps or with `--uninstall`. `--set-status <status>` replaces `TeamsBusyLight.ps1 -SetStatus`

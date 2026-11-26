@@ -16,7 +16,7 @@ namespace TeamsBusyLight
     /// Start menu, the Windows sign-in and "Installed apps", and starts it. No
     /// administrator rights are needed; a UAC prompt only appears for the
     /// optional hosts file entry. Run again to update; the settings are kept.
-    /// Replaces an installation of the PowerShell versions before 1.8.0.
+    /// Replaces an installation of the PowerShell versions before 2.0.0.
     /// </summary>
     internal static class Installer
     {
