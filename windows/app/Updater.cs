@@ -49,9 +49,41 @@ namespace TeamsBusyLight
             return Process.Start(new ProcessStartInfo(exe, "--install --quiet") { UseShellExecute = false, WorkingDirectory = sourceDir });
         }
 
-        /// <summary>Removes update folders of earlier updates</summary>
+        /// <summary>Name start of the program file moved away when uninstalling</summary>
+        public const string UninstallPrefix = "TeamsBusyLight-Uninstall-";
+
+        /// <summary>
+        /// Where uninstalling moves the running program file: the temp folder
+        /// if it is on the same drive as the program folder (otherwise moving
+        /// copies, and the running original stays), else the folder that
+        /// contains the program folder
+        /// </summary>
+        public static string UninstallFolder()
+        {
+            var temp = Path.GetFullPath(Path.GetTempPath());
+            var programs = Path.GetDirectoryName(Path.GetFullPath(AppPaths.ProgramDir));
+            return string.Equals(Path.GetPathRoot(temp), Path.GetPathRoot(programs), StringComparison.OrdinalIgnoreCase)
+                ? temp
+                : programs;
+        }
+
+        /// <summary>Removes update folders of earlier updates and program files left by uninstalling</summary>
         public static void CleanUp()
         {
+            foreach (var folder in new[] { Path.GetFullPath(Path.GetTempPath()), UninstallFolder() }.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    foreach (var file in new DirectoryInfo(folder).GetFiles(UninstallPrefix + "*.exe"))
+                    {
+                        try { file.Delete(); } catch (Exception) { /* still running, next time */ }
+                    }
+                }
+                catch (Exception)
+                {
+                    // Nothing to clean up
+                }
+            }
             try
             {
                 foreach (var folder in new DirectoryInfo(Path.GetTempPath()).GetDirectories(FolderPrefix + "*"))

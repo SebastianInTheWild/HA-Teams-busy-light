@@ -174,10 +174,12 @@ namespace TeamsBusyLight
             File.Delete(AppPaths.StartMenuShortcut);
             Registry.CurrentUser.DeleteSubKeyTree(AppPaths.UninstallKey, false);
             // The running file cannot be deleted, but moved out of the folder
+            // (see Updater.UninstallFolder); Updater.CleanUp removes it on the
+            // next installation, and Windows cleans up the temp folder by itself
             var current = Path.GetFullPath(AppPaths.CurrentExe);
             if (current.StartsWith(Path.GetFullPath(AppPaths.ProgramDir) + "\\", StringComparison.OrdinalIgnoreCase))
             {
-                try { File.Move(current, Path.Combine(Path.GetTempPath(), "TeamsBusyLight-Uninstall-" + Guid.NewGuid().ToString("N") + ".exe")); }
+                try { File.Move(current, Path.Combine(Updater.UninstallFolder(), Updater.UninstallPrefix + Guid.NewGuid().ToString("N") + ".exe")); }
                 catch (Exception) { /* stays until the folder is removed by hand */ }
             }
             foreach (var folder in new[] { AppPaths.ProgramDir, AppPaths.DataDir })

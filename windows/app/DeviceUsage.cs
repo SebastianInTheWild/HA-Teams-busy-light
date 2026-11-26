@@ -106,24 +106,33 @@ namespace TeamsBusyLight
 
         // --- Microphone: audio system -------------------------------------------
 
+        // After an error the audio system is asked again only after a while
+        // (e.g. not ready yet right after signing in, or restarted)
+        const int AudioRetrySeconds = 30;
+        static DateTime audioRetryAfter = DateTime.MinValue;
         static bool audioFailed;
 
         /// <summary>
         /// Names of the processes recording from a microphone right now (e.g.
         /// "Zoom", "msedge"): empty when none, null when the audio system
-        /// cannot be asked
+        /// cannot be asked at the moment
         /// </summary>
         public static string[] MicrophoneUsers()
         {
-            if (audioFailed) return null;
+            if (DateTime.Now < audioRetryAfter) return null;
             try
             {
-                return ProcessNames(AudioCapture.ActiveProcessIds());
+                var names = ProcessNames(AudioCapture.ActiveProcessIds());
+                if (audioFailed) Log.Write("Microphone: audio system available again");
+                audioFailed = false;
+                return names;
             }
-            catch (Exception exception) when (exception is COMException || exception is InvalidCastException)
+            catch (Exception exception)
             {
+                // Logged once per outage, not on every retry
+                if (!audioFailed) Log.Write("Microphone: audio system not available: " + exception.Message);
                 audioFailed = true;
-                Log.Write("Microphone: audio system not available: " + exception.Message);
+                audioRetryAfter = DateTime.Now.AddSeconds(AudioRetrySeconds);
                 return null;
             }
         }

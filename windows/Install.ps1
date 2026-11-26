@@ -21,5 +21,7 @@ $Exe = Join-Path $PSScriptRoot 'TeamsBusyLight.exe'
 $Arguments = if ($Quiet) { '--install --quiet' } else { '--install' }
 # Not -Wait: it would also wait for the tray app the installer starts
 $Process = Start-Process -FilePath $Exe -ArgumentList $Arguments -WorkingDirectory $PSScriptRoot -PassThru
+# Windows PowerShell 5.1 only keeps the exit code when the handle was read before the exit
+$null = $Process.Handle
 $Process.WaitForExit()
 exit $Process.ExitCode

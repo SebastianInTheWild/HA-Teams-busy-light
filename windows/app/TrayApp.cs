@@ -65,6 +65,8 @@ namespace TeamsBusyLight
         DateTime lastSent = DateTime.MinValue, lastPoll = DateTime.MinValue, retryAfter = DateTime.MinValue;
         DateTime lastNetworkCheck = DateTime.MinValue, lastUpdateCheck = DateTime.MinValue;
         bool sending, logMissing, settingsOpen, away, askingNetwork;
+        // The send on its way, so "offline" for a pause is sent after it
+        Task<string> pendingSend;
         DateTime? pausedUntil = Settings.LoadPause();
 
         // Updates: the offered version, its download (null = only the release page)
@@ -244,7 +246,8 @@ namespace TeamsBusyLight
                     Exit();
                     return;
                 }
-                if (showSettingsEvent.WaitOne(0)) OpenSettings();
+                // Not while the network question is open; the request waits until it is answered
+                if (!askingNetwork && showSettingsEvent.WaitOne(0)) OpenSettings();
                 if (pausedUntil != null && pausedUntil != DateTime.MaxValue && DateTime.Now >= pausedUntil) Resume();
                 if (manual != null && !manual.IsActive) ClearManual();
                 if ((DateTime.Now - lastPoll).TotalSeconds >= config.PollSeconds)
@@ -252,8 +255,7 @@ namespace TeamsBusyLight
                     lastPoll = DateTime.Now;
                     UpdateState();
                 }
-                UpdateNetworkState();
-                AskForNewNetwork();
+                if (UpdateNetworkState()) AskForNewNetwork();
                 Send();
                 CheckForUpdates();
                 if (updateInstaller != null && updateInstaller.HasExited)
@@ -363,11 +365,13 @@ namespace TeamsBusyLight
             string error;
             try
             {
-                error = await Sender.SendAsync(http, config.WebhookUrl, effective, activity, language, extra);
+                pendingSend = Sender.SendAsync(http, config.WebhookUrl, effective, activity, language, extra);
+                error = await pendingSend;
             }
             finally
             {
                 sending = false;
+                pendingSend = null;
             }
             if (away || pausedUntil != null) return;
             if (error != null)
@@ -419,10 +423,36 @@ namespace TeamsBusyLight
             if (tellHomeAssistant)
             {
                 // Not awaited; the result is not needed
-                _ = Sender.SendAsync(http, config.WebhookUrl, "offline", "not_in_call", null, Sender.OfflineExtra(devices.Camera));
+                _ = SendOfflineAfter(pendingSend, config.WebhookUrl);
             }
             sendError = null;
             UpdateTrayDisplay();
+        }
+
+        /// <summary>
+        /// Sends "offline" for a pause once the send on its way has finished,
+        /// so the older status cannot arrive after it
+        /// </summary>
+        async Task SendOfflineAfter(Task<string> previous, string webhookUrl)
+        {
+            try
+            {
+                if (previous != null) await previous;
+            }
+            catch (Exception)
+            {
+                // Its result does not matter here
+            }
+            // Resumed in the meantime: the current status is sent instead
+            if (pausedUntil == null) return;
+            try
+            {
+                await Sender.SendAsync(http, webhookUrl, "offline", "not_in_call", null, Sender.OfflineExtra(devices.Camera));
+            }
+            catch (Exception exception)
+            {
+                Log.Write(exception.Message);
+            }
         }
 
         void Resume()
@@ -438,14 +468,15 @@ namespace TeamsBusyLight
 
         /// <summary>
         /// Pauses sending outside the networks set under "Send only in these
-        /// networks"; Home Assistant then sets Teams offline after its timeout
+        /// networks"; Home Assistant then sets Teams offline after its timeout.
+        /// Checks at most every 5 seconds; true when it checked.
         /// </summary>
-        void UpdateNetworkState()
+        bool UpdateNetworkState()
         {
-            if ((DateTime.Now - lastNetworkCheck).TotalSeconds < 5) return;
+            if ((DateTime.Now - lastNetworkCheck).TotalSeconds < 5) return false;
             lastNetworkCheck = DateTime.Now;
             var isAway = !HomeNetwork.IsHome(config.HomeNetworks);
-            if (isAway == away) return;
+            if (isAway == away) return true;
             away = isAway;
             if (away)
             {
@@ -458,6 +489,7 @@ namespace TeamsBusyLight
                 SendNow();
             }
             UpdateTrayDisplay();
+            return true;
         }
 
         /// <summary>
@@ -500,7 +532,8 @@ namespace TeamsBusyLight
 
         void OpenSettings()
         {
-            if (settingsOpen) return;
+            // Not while the network question is open: saving would drop its answer
+            if (settingsOpen || askingNetwork) return;
             settingsOpen = true;
             try
             {
@@ -716,11 +749,19 @@ namespace TeamsBusyLight
         void Exit()
         {
             timer.Stop();
-            // Tell Home Assistant right away instead of waiting for the timeout;
-            // not when stopped for an update, the new version sends right after starting
-            if (!string.IsNullOrEmpty(config.WebhookUrl) && pausedUntil == null && !updating && HomeNetwork.IsHome(config.HomeNetworks))
+            try
             {
-                Sender.Send(config.WebhookUrl, "offline", "not_in_call", Sender.OfflineExtra(devices.Camera), 3);
+                // Tell Home Assistant right away instead of waiting for the timeout;
+                // not when stopped for an update, the new version sends right after starting
+                if (!string.IsNullOrEmpty(config.WebhookUrl) && pausedUntil == null && !updating && HomeNetwork.IsHome(config.HomeNetworks))
+                {
+                    Sender.Send(config.WebhookUrl, "offline", "not_in_call", Sender.OfflineExtra(devices.Camera), 3);
+                }
+            }
+            catch (Exception exception)
+            {
+                // Exit anyway, an update waits for this process to end
+                Log.Write(exception.Message);
             }
             tray.Visible = false;
             ExitThread();

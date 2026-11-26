@@ -30,6 +30,7 @@ namespace TeamsBusyLight
     {
         const int TailLines = 1000;
         const int TailBytes = 4 * 1024 * 1024;
+        const int TailBlockBytes = 64 * 1024;
 
         static readonly string[] StatusMarkers = { "SetBadge Setting badge:", "SetTaskbarIconOverlay" };
         static readonly string[] ActivityMarkers = { "NotifyCallActive", "NotifyCallAccepted", "NotifyCallEnded", "reportIncomingCall", "RequestNewOutgoingCallWithOptions" };
@@ -83,24 +84,48 @@ namespace TeamsBusyLight
             }
         }
 
-        /// <summary>The last lines of a log that Teams keeps writing</summary>
-        static IList<string> ReadTail(string path)
+        /// <summary>
+        /// The last lines of a log that Teams keeps writing. Reads backwards in
+        /// blocks until it has enough lines (at most TailBytes), instead of
+        /// reading megabytes on every poll.
+        /// </summary>
+        internal static IList<string> ReadTail(string path)
         {
             try
             {
                 using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
                 {
-                    var start = Math.Max(0, stream.Length - TailBytes);
-                    stream.Seek(start, SeekOrigin.Begin);
-                    using (var reader = new StreamReader(stream, Encoding.UTF8))
+                    var end = stream.Length;
+                    var start = end;
+                    var blocks = new List<byte[]>();
+                    var lineBreaks = 0;
+                    // One line break more than lines: the first line may start in the middle
+                    while (start > 0 && lineBreaks <= TailLines && end - start < TailBytes)
                     {
-                        var lines = new List<string>();
+                        var size = (int)Math.Min(Math.Min(TailBlockBytes, start), TailBytes - (end - start));
+                        start -= size;
+                        var block = new byte[size];
+                        stream.Seek(start, SeekOrigin.Begin);
+                        var read = 0;
+                        while (read < size)
+                        {
+                            var count = stream.Read(block, read, size - read);
+                            if (count == 0) break;
+                            read += count;
+                        }
+                        for (var i = 0; i < read; i++) if (block[i] == (byte)'\n') lineBreaks++;
+                        blocks.Insert(0, block);
+                    }
+                    var text = Encoding.UTF8.GetString(blocks.SelectMany(block => block).ToArray()).TrimStart('\uFEFF');
+                    var lines = new List<string>();
+                    using (var reader = new StringReader(text))
+                    {
                         string line;
                         while ((line = reader.ReadLine()) != null) lines.Add(line);
-                        // The first line may start in the middle
-                        if (start > 0 && lines.Count > 0) lines.RemoveAt(0);
-                        return lines.Count > TailLines ? lines.GetRange(lines.Count - TailLines, TailLines) : lines;
                     }
+                    // The first line may start in the middle
+                    if (start > 0 && lines.Count > 0) lines.RemoveAt(0);
+                    return lines.Count > TailLines ? lines.GetRange(lines.Count - TailLines, TailLines) : lines;
                 }
             }
             catch (Exception)
